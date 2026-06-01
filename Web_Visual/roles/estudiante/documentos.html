@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Documentos - SmartCampus UTA</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="../../assets/css/style.css">
+  <style>
+    .tree-root { list-style:none; padding:0; margin:0; }
+    .tree-children { list-style:none; padding-left:1.2rem; margin-top:0.3rem;
+                     border-left:2px solid var(--line); }
+    .tree-node { margin-bottom:0.4rem; }
+    .tree-label { cursor:pointer; padding:0.3rem 0.6rem; border-radius:6px; display:inline-block; }
+    .tree-label:hover { background: rgba(232,122,42,0.12); }
+    .tree-leaf .tree-label { color: var(--muted); }
+  </style>
+</head>
+<body>
+<div id="sc-navbar"></div>
+<main class="container py-4">
+  <header class="page-header">
+    <h1>📁 Documentos</h1>
+    <p class="text-muted">Organización jerárquica usando <strong>Árbol N-ario</strong> con recorrido BFS/DFS.</p>
+  </header>
+
+  <div class="row g-4">
+    <div class="col-md-4">
+      <section class="content-panel p-4">
+        <h2 class="h5 mb-3">Crear carpeta / archivo</h2>
+        <div id="doc-msg" hidden class="alert"></div>
+        <form id="form-doc">
+          <div class="mb-3">
+            <label class="form-label">Tipo</label>
+            <select class="form-select" id="tipo-doc">
+              <option value="carpeta">📁 Carpeta</option>
+              <option value="archivo">📄 Archivo</option>
+            </select>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Nombre</label>
+            <input class="form-control" id="nombre-doc" type="text" placeholder="Ej. Parcial 1" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Carpeta padre <small class="text-muted">(opcional)</small></label>
+            <select class="form-select" id="padre-doc">
+              <option value="">Raíz (sin padre)</option>
+            </select>
+          </div>
+          <button class="btn btn-primary w-100" type="submit">Crear</button>
+        </form>
+      </section>
+    </div>
+
+    <div class="col-md-8">
+      <section class="content-panel p-4">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <h2 class="h5 mb-0">Árbol de documentos</h2>
+          <div class="d-flex gap-2">
+            <button class="btn btn-outline-secondary btn-sm" id="btn-bfs">BFS</button>
+            <button class="btn btn-outline-secondary btn-sm" id="btn-dfs">DFS</button>
+          </div>
+        </div>
+        <div id="tree-container">
+          <div class="spinner-block text-center"><div class="spinner-border text-primary" role="status"></div></div>
+        </div>
+        <div id="recorrido" class="mt-3 mock-note" hidden></div>
+      </section>
+    </div>
+  </div>
+</main>
+
+<footer class="footer text-center mt-4">
+  <div class="container"><p class="mb-0">SmartCampus UTA · 2025</p></div>
+</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script type="module">
+  import { requireSession } from '../../assets/js/auth.js';
+  import { obtenerDocumentosUsuario, crearDocumento, eliminarDocumento } from '../../../src/Persistence/supabaseClient.js';
+  import { Arbol } from '../../../src/Domain/DataStructures/Arbol.js';
+
+  const usuario = requireSession();
+  if (!usuario) throw new Error('Sin sesión');
+
+  let arbol = new Arbol();
+  const treeEl = document.getElementById('tree-container');
+  const padreSelect = document.getElementById('padre-doc');
+
+  function llenarPadres() {
+    const carpetas = arbol.dfs().filter(d => d.tipo === 'carpeta');
+    padreSelect.innerHTML = '<option value="">Raíz (sin padre)</option>';
+    carpetas.forEach(c => {
+      const opt = document.createElement('option');
+      opt.value = c.id; opt.textContent = `📁 ${c.nombre}`;
+      padreSelect.appendChild(opt);
+    });
+  }
+
+  async function cargar() {
+    treeEl.innerHTML = '<div class="spinner-block text-center"><div class="spinner-border text-primary" role="status"></div></div>';
+    try {
+      const docs = await obtenerDocumentosUsuario(usuario.id);
+      arbol = new Arbol();
+      arbol.construirDesdeArray(docs);
+      if (!arbol.raiz) {
+        treeEl.innerHTML = '<p class="text-muted">No tienes documentos. Crea una carpeta para empezar.</p>';
+        return;
+      }
+      treeEl.innerHTML = `<ul class="tree-root">${arbol.renderHTML()}</ul>`;
+      llenarPadres();
+    } catch (e) {
+      treeEl.innerHTML = `<div class="alert alert-danger">${e.message}</div>`;
+    }
+  }
+
+  document.getElementById('form-doc').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const tipo = document.getElementById('tipo-doc').value;
+    const nombre = document.getElementById('nombre-doc').value.trim();
+    const padre = document.getElementById('padre-doc').value || null;
+    const msg = document.getElementById('doc-msg');
+    const btn = e.target.querySelector('button');
+    btn.disabled = true; msg.hidden = true;
+    try {
+      await crearDocumento(nombre, tipo, padre, usuario.id);
+      msg.className = 'alert alert-success'; msg.textContent = `${tipo} "${nombre}" creado.`; msg.hidden = false;
+      e.target.reset(); await cargar();
+    } catch (err) {
+      msg.className = 'alert alert-danger'; msg.textContent = err.message; msg.hidden = false;
+    } finally { btn.disabled = false; }
+  });
+
+  treeEl.addEventListener('click', async (e) => {
+    const label = e.target.closest('.tree-label[data-tipo="archivo"]');
+    if (!label) return;
+    if (confirm(`¿Eliminar "${label.textContent.trim()}"?`)) {
+      await eliminarDocumento(label.dataset.id);
+      await cargar();
+    }
+  });
+
+  document.getElementById('btn-bfs').addEventListener('click', () => {
+    const rec = arbol.bfs().map(d => d.nombre).join(' → ');
+    const el = document.getElementById('recorrido');
+    el.textContent = `BFS: ${rec}`; el.hidden = false;
+  });
+
+  document.getElementById('btn-dfs').addEventListener('click', () => {
+    const rec = arbol.dfs().map(d => d.nombre).join(' → ');
+    const el = document.getElementById('recorrido');
+    el.textContent = `DFS preorden: ${rec}`; el.hidden = false;
+  });
+
+  await cargar();
+</script>
+</body>
+</html>

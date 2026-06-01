@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SmartCampus UTA</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="Web_Visual/assets/css/style.css">
+</head>
+<body>
+<div id="sc-navbar"></div>
+
+<section class="hero">
+  <div class="container">
+    <div>
+      <h1>SmartCampus <strong>UTA Web</strong></h1>
+      <p>Gestión de atención, trámites, documentación y rutas internas del campus universitario. Estructuras de datos aplicadas: listas, pilas, colas, árboles y grafos.</p>
+      <div class="d-flex gap-3 mt-4">
+        <a href="Web_Visual/login.html" class="btn btn-warning btn-lg fw-bold px-4">Iniciar sesión</a>
+        <a href="Web_Visual/registro.html" class="btn btn-outline-light btn-lg px-4">Registrarse</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="container py-5">
+  <div class="row g-4 text-center">
+    <div class="col-md-3">
+      <div class="content-panel p-4">
+        <div class="fs-1 mb-2">📋</div>
+        <h5>Trámites</h5>
+        <p class="text-muted small">Lista simplemente enlazada para historial dinámico de solicitudes</p>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="content-panel p-4">
+        <div class="fs-1 mb-2">🎫</div>
+        <h5>Turnos</h5>
+        <p class="text-muted small">Cola FIFO para orden de atención estudiantil</p>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="content-panel p-4">
+        <div class="fs-1 mb-2">📁</div>
+        <h5>Documentos</h5>
+        <p class="text-muted small">Árbol N-ario para clasificación jerárquica</p>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="content-panel p-4">
+        <div class="fs-1 mb-2">🗺️</div>
+        <h5>Rutas</h5>
+        <p class="text-muted small">Grafo + Dijkstra para ruta óptima en el campus</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer class="footer text-center">
+  <div class="container">
+    <p class="mb-0">SmartCampus UTA · Ingeniería de Software · Estructura de Datos · UTA 2025</p>
+  </div>
+</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script type="module" src="Web_Visual/assets/js/auth.js"></script>
+</body>
+</html>
