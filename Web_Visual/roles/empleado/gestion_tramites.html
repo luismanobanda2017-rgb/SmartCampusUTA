@@ -1,73 +1,149 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Gestión de Trámites - Empleado</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <link rel="stylesheet" href="../../assets/css/style.css">
 </head>
 <body>
-<div id="sc-navbar"></div>
-<main class="container py-4">
-  <header class="page-header d-flex justify-content-between align-items-center">
-    <div>
-      <h1>📋 Gestión de Trámites</h1>
-      <p class="text-muted">Lista de trámites pendientes y opciones para actualizar estado.</p>
-    </div>
-    <a href="dashboard.html" class="btn btn-outline-secondary">← Volver</a>
-  </header>
+  <div class="app-shell">
+    <div id="sc-navbar"></div>
 
-  <section class="content-panel p-4 mt-3">
-    <div id="tramites-list">
-      <div class="spinner-block text-center"><div class="spinner-border text-primary" role="status"></div></div>
-    </div>
-  </section>
-</main>
+    <main class="container py-4">
 
-<footer class="footer text-center mt-4">
-  <div class="container"><p class="mb-0">SmartCampus UTA · 2025</p></div>
-</footer>
-
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-<script type="module">
-  import { requireSession } from '../../assets/js/auth.js';
-  import { obtenerTodosTramites, actualizarEstadoTramite } from '../../../src/Persistence/supabaseClient.js';
-
-  const usuario = requireSession();
-  if (!usuario || usuario.rol !== 'empleado') { alert('Acceso solo para empleados.'); window.location.href='../../../index.html'; }
-
-  const el = document.getElementById('tramites-list');
-
-  async function cargar() {
-    el.innerHTML = '<div class="spinner-block text-center"><div class="spinner-border text-primary" role="status"></div></div>';
-    try {
-      const tramites = await obtenerTodosTramites();
-      const pendientes = tramites.filter(t => t.estado === 'pendiente');
-      if (!pendientes.length) { el.innerHTML = '<p class="text-muted">No hay trámites pendientes.</p>'; return; }
-      el.innerHTML = `<div class="list-group">${pendientes.map(t=>`<div class="list-group-item d-flex justify-content-between align-items-center">
-        <div><strong>${t.tipo}</strong><br><small class="text-muted">${t.usuarios?.nombre||'—'}</small></div>
-        <div class="d-flex gap-2">
-          <button class="btn btn-sm btn-success" data-aprobar="${t.id}">Aprobar</button>
-          <button class="btn btn-sm btn-danger" data-rechazar="${t.id}">Rechazar</button>
+      <header class="page-header mb-4">
+        <div class="d-flex justify-content-between align-items-start">
+          <div>
+            <h1 class="fw-800 mb-1">📋 Gestión de Trámites</h1>
+            <p class="text-muted mb-0">Revisa y actualiza el estado de los trámites pendientes.</p>
+          </div>
+          <a href="dashboard.html" class="btn btn-outline-secondary btn-sm">← Volver</a>
         </div>
-      </div>`).join('')}</div>`;
-    } catch (e) { el.innerHTML = `<div class="alert alert-danger">${e.message}</div>`; }
-  }
+      </header>
 
-  el.addEventListener('click', async (ev) => {
-    const ap = ev.target.closest('[data-aprobar]');
-    const re = ev.target.closest('[data-rechazar]');
-    if (ap) {
-      try { await actualizarEstadoTramite(ap.dataset.aprobar, 'aprobado', usuario.id); await cargar(); }
-      catch (e) { alert(e.message); }
-    }
-    if (re) {
-      try { await actualizarEstadoTramite(re.dataset.rechazar, 'rechazado', usuario.id); await cargar(); }
-      catch (e) { alert(e.message); }
-    }
-  });
+      <!-- Filtro de estado -->
+      <div class="content-panel mb-4">
+        <div class="d-flex align-items-center gap-3 flex-wrap">
+          <label class="form-label mb-0 fw-semibold">Filtrar por estado:</label>
+          <div class="d-flex gap-2 flex-wrap" id="filtros">
+            <button class="btn btn-sm btn-primary active-filter" data-estado="pendiente">Pendientes</button>
+            <button class="btn btn-sm btn-outline-secondary" data-estado="todos">Todos</button>
+            <button class="btn btn-sm btn-outline-success" data-estado="aprobado">Aprobados</button>
+            <button class="btn btn-sm btn-outline-danger" data-estado="rechazado">Rechazados</button>
+          </div>
+          <button id="btn-refrescar" class="btn btn-outline-secondary btn-sm ms-auto">↻ Refrescar</button>
+        </div>
+      </div>
 
-  await cargar();
-</script>
+      <!-- Lista de trámites -->
+      <div class="content-panel">
+        <div id="tramites-list">
+          <div class="spinner-block text-center">
+            <div class="spinner-border text-primary" role="status"></div>
+          </div>
+        </div>
+      </div>
+
+    </main>
+
+    <footer class="footer text-center mt-4">
+      <div class="container"><p class="mb-0">SmartCampus UTA - 2025</p></div>
+    </footer>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script type="module" src="../../assets/js/auth.js"></script>
+
+  <script type="module">
+    import { requireSession } from '../../assets/js/auth.js';
+    import { obtenerTodosTramites, actualizarEstadoTramite } from '../../../src/Persistence/supabaseClient.js';
+
+    const usuario = requireSession();
+    if (!usuario || usuario.rol !== 'empleado') {
+      window.location.href = '../../../index.html';
+    }
+
+    const el = document.getElementById('tramites-list');
+    let estadoActivo = 'pendiente';
+
+    const estadoBadge = {
+      pendiente:   '<span class="badge-state state-pendiente">Pendiente</span>',
+      aprobado:    '<span class="badge-state state-aprobado">Aprobado</span>',
+      rechazado:   '<span class="badge-state state-cancelado">Rechazado</span>',
+      en_revision: '<span class="badge-state state-en-revision">En revisión</span>',
+    };
+
+    async function cargar() {
+      el.innerHTML = '<div class="spinner-block text-center"><div class="spinner-border text-primary" role="status"></div></div>';
+      try {
+        const todos = await obtenerTodosTramites();
+        const lista = estadoActivo === 'todos' ? todos : todos.filter(t => t.estado === estadoActivo);
+
+        if (!lista.length) {
+          el.innerHTML = '<p class="text-muted mb-0">No hay trámites para mostrar.</p>';
+          return;
+        }
+
+        el.innerHTML = `
+          <div class="mb-2 text-muted small">${lista.length} trámite(s) encontrado(s)</div>
+          <div class="list-group list-group-flush">
+            ${lista.map(t => `
+              <div class="list-group-item px-0 py-3">
+                <div class="d-flex justify-content-between align-items-start gap-2">
+                  <div>
+                    <div class="fw-semibold">${t.tipo || 'Trámite'}</div>
+                    <div class="small text-muted mt-1">
+                      Solicitante: <strong>${t.usuarios?.nombre || '—'}</strong>
+                    </div>
+                    <div class="small text-muted">
+                      Fecha: ${t.created_at ? new Date(t.created_at).toLocaleDateString('es-EC') : '—'}
+                    </div>
+                    <div class="mt-1">${estadoBadge[t.estado] || `<span class="badge bg-secondary">${t.estado}</span>`}</div>
+                  </div>
+                  ${t.estado === 'pendiente' ? `
+                    <div class="d-flex gap-2 flex-shrink-0">
+                      <button class="btn btn-sm btn-success" data-aprobar="${t.id}">Aprobar</button>
+                      <button class="btn btn-sm btn-danger" data-rechazar="${t.id}">Rechazar</button>
+                    </div>` : ''}
+                </div>
+              </div>
+            `).join('')}
+          </div>`;
+      } catch (e) {
+        el.innerHTML = `<div class="alert alert-danger small">${e.message}</div>`;
+      }
+    }
+
+    // Delegación de eventos para aprobar/rechazar
+    el.addEventListener('click', async (ev) => {
+      const ap = ev.target.closest('[data-aprobar]');
+      const re = ev.target.closest('[data-rechazar]');
+      if (ap) {
+        try { await actualizarEstadoTramite(ap.dataset.aprobar, 'aprobado', usuario.id); await cargar(); }
+        catch (e) { alert(e.message); }
+      }
+      if (re) {
+        try { await actualizarEstadoTramite(re.dataset.rechazar, 'rechazado', usuario.id); await cargar(); }
+        catch (e) { alert(e.message); }
+      }
+    });
+
+    // Filtros
+    document.getElementById('filtros').addEventListener('click', (ev) => {
+      const btn = ev.target.closest('[data-estado]');
+      if (!btn) return;
+      estadoActivo = btn.dataset.estado;
+      document.querySelectorAll('#filtros [data-estado]').forEach(b => b.classList.remove('active-filter', 'btn-primary'));
+      btn.classList.add('active-filter', 'btn-primary');
+      btn.classList.remove('btn-outline-secondary', 'btn-outline-success', 'btn-outline-danger');
+      cargar();
+    });
+
+    document.getElementById('btn-refrescar').addEventListener('click', cargar);
+
+    document.addEventListener('DOMContentLoaded', cargar);
+  </script>
 </body>
 </html>

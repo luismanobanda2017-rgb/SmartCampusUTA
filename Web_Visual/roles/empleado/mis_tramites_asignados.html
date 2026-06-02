@@ -3,44 +3,125 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Mis trámites asignados - Empleado</title>
+  <title>Mis Trámites Asignados - Empleado</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-  <link rel="stylesheet" href="../../assets/css/styles.css">
-  <link rel="stylesheet" href="../../assets/css/empleado.css">
+  <link rel="stylesheet" href="../../assets/css/style.css">
 </head>
-<body class="empleado-accent">
+<body>
   <div class="app-shell">
-    <div data-navbar></div>
+    <div id="sc-navbar"></div>
+
     <main class="container py-4">
-      <div class="page-header">
-        <h1>Mis trámites asignados</h1>
-        <p class="text-muted">Gestiona y actualiza el estado de los trámites que te han sido asignados.</p>
+
+      <header class="page-header mb-4">
+        <div class="d-flex justify-content-between align-items-start">
+          <div>
+            <h1 class="fw-800 mb-1">📁 Mis Trámites Asignados</h1>
+            <p class="text-muted mb-0">Gestiona y actualiza los trámites que te han sido asignados.</p>
+          </div>
+          <a href="dashboard.html" class="btn btn-outline-secondary btn-sm">← Volver</a>
+        </div>
+      </header>
+
+      <div class="content-panel">
+        <div id="tramites-asignados">
+          <div class="spinner-block text-center">
+            <div class="spinner-border text-primary" role="status"></div>
+          </div>
+        </div>
       </div>
-      <section class="content-panel">
-        <table class="table table-striped">
-          <thead><tr><th>#</th><th>Solicitante</th><th>Trámite</th><th>Estado</th><th>Acciones</th></tr></thead>
-          <tbody id="tbody"></tbody>
-        </table>
-      </section>
+
     </main>
-    <div data-footer></div>
+
+    <footer class="footer text-center mt-4">
+      <div class="container"><p class="mb-0">SmartCampus UTA - 2025</p></div>
+    </footer>
   </div>
+
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-  <script src="../../assets/js/config.js"></script>
-  <script src="../../assets/js/utils.js"></script>
-  <script type="module" src="../../assets/js/api.js"></script>
   <script type="module" src="../../assets/js/auth.js"></script>
-  <script src="../../assets/js/componentes/navbar.js"></script>
-  <script src="../../assets/js/componentes/footer.js"></script>
-  <script>
-    async function load(){
-      const data = await SmartCampusAPI.parseJson(await SmartCampusAPI.obtenerTramitesAsignados());
-      const tbody = document.getElementById('tbody');
-      if(!data || !data.length) { tbody.innerHTML = '<tr><td colspan="5" class="text-muted">No hay trámites asignados</td></tr>'; return; }
-      tbody.innerHTML = data.map((t,i)=>`<tr><td>${i+1}</td><td>${t.solicitante}</td><td>${t.tipo}</td><td>${t.estado}</td><td><button class="btn btn-sm btn-success" onclick="finalizar('${t.id}')">Finalizar</button></td></tr>`).join('');
+
+  <script type="module">
+    import { requireSession } from '../../assets/js/auth.js';
+    import { obtenerTodosTramites, actualizarEstadoTramite } from '../../../src/Persistence/supabaseClient.js';
+
+    const usuario = requireSession();
+    if (!usuario || usuario.rol !== 'empleado') {
+      window.location.href = '../../../index.html';
     }
-    function finalizar(id){ alert('Trámite '+id+' finalizado (simulado).'); }
-    load();
+
+    const el = document.getElementById('tramites-asignados');
+
+    const estadoBadge = {
+      pendiente:   '<span class="badge-state state-pendiente">Pendiente</span>',
+      aprobado:    '<span class="badge-state state-aprobado">Aprobado</span>',
+      rechazado:   '<span class="badge-state state-cancelado">Rechazado</span>',
+      en_revision: '<span class="badge-state state-en-revision">En revisión</span>',
+    };
+
+    async function cargar() {
+      el.innerHTML = '<div class="spinner-block text-center"><div class="spinner-border text-primary" role="status"></div></div>';
+      try {
+        const todos = await obtenerTodosTramites();
+        // Mostrar trámites pendientes asignables al empleado
+        const lista = todos?.filter(t => ['pendiente', 'en_revision'].includes(t.estado)) ?? [];
+
+        if (!lista.length) {
+          el.innerHTML = '<p class="text-muted mb-0">No tienes trámites asignados actualmente.</p>';
+          return;
+        }
+
+        el.innerHTML = `
+          <div class="mb-2 text-muted small">${lista.length} trámite(s) asignado(s)</div>
+          <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+              <thead class="table-light">
+                <tr>
+                  <th class="small text-muted fw-semibold">#</th>
+                  <th class="small text-muted fw-semibold">Trámite</th>
+                  <th class="small text-muted fw-semibold">Solicitante</th>
+                  <th class="small text-muted fw-semibold">Fecha</th>
+                  <th class="small text-muted fw-semibold">Estado</th>
+                  <th class="small text-muted fw-semibold">Acciones</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${lista.map((t, i) => `
+                  <tr>
+                    <td class="text-muted small">${i + 1}</td>
+                    <td class="fw-semibold">${t.tipo || '—'}</td>
+                    <td class="small">${t.usuarios?.nombre || '—'}</td>
+                    <td class="small text-muted">${t.created_at ? new Date(t.created_at).toLocaleDateString('es-EC') : '—'}</td>
+                    <td>${estadoBadge[t.estado] || `<span class="badge bg-secondary">${t.estado}</span>`}</td>
+                    <td>
+                      <div class="d-flex gap-1">
+                        <button class="btn btn-sm btn-success" data-aprobar="${t.id}">Aprobar</button>
+                        <button class="btn btn-sm btn-danger" data-rechazar="${t.id}">Rechazar</button>
+                      </div>
+                    </td>
+                  </tr>`).join('')}
+              </tbody>
+            </table>
+          </div>`;
+      } catch (e) {
+        el.innerHTML = `<div class="alert alert-danger small">${e.message}</div>`;
+      }
+    }
+
+    el.addEventListener('click', async (ev) => {
+      const ap = ev.target.closest('[data-aprobar]');
+      const re = ev.target.closest('[data-rechazar]');
+      if (ap) {
+        try { await actualizarEstadoTramite(ap.dataset.aprobar, 'aprobado', usuario.id); await cargar(); }
+        catch (e) { alert(e.message); }
+      }
+      if (re) {
+        try { await actualizarEstadoTramite(re.dataset.rechazar, 'rechazado', usuario.id); await cargar(); }
+        catch (e) { alert(e.message); }
+      }
+    });
+
+    document.addEventListener('DOMContentLoaded', cargar);
   </script>
 </body>
 </html>
