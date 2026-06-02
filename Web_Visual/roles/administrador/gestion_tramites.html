@@ -1,151 +1,88 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Trámites - SmartCampus UTA</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gestion de tramites - Administrador</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-  <link rel="stylesheet" href="../../assets/css/style.css">
+  <link rel="stylesheet" href="../../assets/css/styles.css">
+  <link rel="stylesheet" href="../../assets/css/admin.css">
 </head>
-<body>
-<div id="sc-navbar"></div>
-<main class="container py-4">
-  <header class="page-header d-flex justify-content-between align-items-center">
-    <div>
-      <h1>📋 Gestión de Trámites</h1>
-      <p class="text-muted">Lista doblemente enlazada para navegación bidireccional en expedientes.</p>
-    </div>
-    <a href="dashboard.html" class="btn btn-outline-secondary">← Volver</a>
-  </header>
-
-  <div class="row g-3 mb-3">
-    <div class="col-auto">
-      <select class="form-select" id="filtro-estado">
-        <option value="">Todos los estados</option>
-        <option value="pendiente">Pendiente</option>
-        <option value="en_proceso">En proceso</option>
-        <option value="completado">Completado</option>
-        <option value="rechazado">Rechazado</option>
-      </select>
-    </div>
-    <div class="col">
-      <input class="form-control" id="buscador" type="search" placeholder="Buscar por tipo o descripción...">
-    </div>
-    <!-- Navegación Lista Doble -->
-    <div class="col-auto d-flex gap-2">
-      <button class="btn btn-outline-secondary btn-sm" id="btn-anterior">← Anterior</button>
-      <button class="btn btn-outline-secondary btn-sm" id="btn-siguiente">Siguiente →</button>
-    </div>
+<body class="admin-accent">
+  <div class="app-shell">
+    <div data-navbar></div>
+    <main class="container py-4">
+      <div class="page-header">
+        <h1>Gestion de tramites</h1>
+        <p class="text-muted">Consulta global de solicitudes, responsables y estados.</p>
+      </div>
+      <section class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr><th>Fecha</th><th>Tipo</th><th>Responsable</th><th>Estado</th><th>Asignacion</th><th></th></tr>
+          </thead>
+          <tbody data-tramites></tbody>
+        </table>
+      </section>
+    </main>
+    <div data-footer></div>
   </div>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="../../assets/js/config.js"></script>
+  <script src="../../assets/js/utils.js"></script>
+  <script type="module" src="../../assets/js/api.js"></script>
+  <script type="module" src="../../assets/js/auth.js"></script>
+  <script src="../../assets/js/componentes/navbar.js"></script>
+  <script src="../../assets/js/componentes/footer.js"></script>
+  <script>
+    document.addEventListener("DOMContentLoaded", async () => {
+      const target = document.querySelector("[data-tramites]");
+      try {
+        const [data, usuarios] = await Promise.all([
+          SmartCampusAPI.parseJson(await SmartCampusAPI.obtenerHistorialTramites()),
+          SmartCampusAPI.parseJson(await SmartCampusAPI.listarUsuarios())
+        ]);
+        const empleados = usuarios.filter((u) => Number(u.rolId || u.rol_id) === 2);
+        const opciones = (selected) => empleados
+          .map((e) => `<option value="${e.id}" ${Number(selected) === Number(e.id) ? "selected" : ""}>${e.nombre}</option>`)
+          .join("");
+        target.innerHTML = data.length ? data.map((t) => `
+          <tr>
+            <td>${(t.fechaSolicitud || "").toString().replace("T", " ")}</td>
+            <td>Tipo ${t.tipoTramiteId || "-"}</td>
+            <td>${t.empleadoId ? `Empleado ${t.empleadoId}` : "Sin asignar"}</td>
+            <td>${SmartCampusUtils.stateBadge(t.estado || "pendiente")}</td>
+            <td>
+              <form class="d-flex gap-2" data-asignar-tramite="${t.id}">
+                <select class="form-select form-select-sm" name="empleadoId" required>
+                  <option value="">Seleccionar</option>
+                  ${opciones(t.empleadoId)}
+                </select>
+                <button class="btn btn-sm btn-primary">Asignar</button>
+              </form>
+            </td>
+            <td><a class="btn btn-sm btn-outline-primary" href="../../tramites/detalle_tramite.html?id=${t.id}">Detalle</a></td>
+          </tr>
+        `).join("") : `<tr><td colspan="6" class="text-muted">No hay tramites registrados.</td></tr>`;
+      } catch (error) {
+        target.innerHTML = `<tr><td colspan="6" class="text-danger">${error.message}</td></tr>`;
+      }
+    });
 
-  <div id="detalle-navegacion" class="mock-note mb-3" hidden>
-    <strong>Expediente seleccionado (navegación ListaDoble):</strong>
-    <span id="expediente-info"></span>
-  </div>
-
-  <section class="content-panel p-4">
-    <div id="tabla-tramites">
-      <div class="spinner-block text-center"><div class="spinner-border text-primary" role="status"></div></div>
-    </div>
-  </section>
-</main>
-
-<footer class="footer text-center mt-4">
-  <div class="container"><p class="mb-0">SmartCampus UTA · 2025</p></div>
-</footer>
-
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-<script type="module">
-  import { requireSession } from '../../assets/js/auth.js';
-  import { obtenerTodosTramites, actualizarEstadoTramite } from '../../../src/Persistence/supabaseClient.js';
-  import { ListaDoble } from '../../../src/Domain/DataStructures/ListaDoble.js';
-
-  const usuario = requireSession();
-  if (!usuario || usuario.rol !== 'admin') { window.location.href = '../../index.html'; }
-
-  const listaDoble = new ListaDoble();
-  const el = document.getElementById('tabla-tramites');
-  let todosTramites = [];
-
-  const estadoBadge = (e) => {
-    const cl = { pendiente:'warning', en_proceso:'primary', completado:'success', rechazado:'danger' };
-    return `<span class="badge bg-${cl[e]||'secondary'}">${e}</span>`;
-  };
-
-  function render(items) {
-    if (!items.length) { el.innerHTML = '<p class="text-muted">Sin trámites.</p>'; return; }
-    el.innerHTML = `<div class="table-responsive"><table class="table table-sm table-hover">
-      <thead><tr><th>Tipo</th><th>Descripción</th><th>Estado</th><th>Usuario</th><th>Fecha</th><th>Cambiar estado</th></tr></thead>
-      <tbody>${items.map(t => `<tr>
-        <td><strong>${t.tipo}</strong></td>
-        <td>${t.descripcion||'-'}</td>
-        <td>${estadoBadge(t.estado)}</td>
-        <td>${t.usuarios?.nombre||'-'}</td>
-        <td>${new Date(t.created_at).toLocaleDateString('es-EC')}</td>
-        <td>
-          <select class="form-select form-select-sm" data-tramite="${t.id}" style="width:130px">
-            <option value="">Cambiar...</option>
-            <option value="en_proceso">En proceso</option>
-            <option value="completado">Completado</option>
-            <option value="rechazado">Rechazado</option>
-          </select>
-        </td>
-      </tr>`).join('')}</tbody>
-    </table></div>`;
-  }
-
-  async function cargar() {
-    try {
-      todosTramites = await obtenerTodosTramites();
-      // Cargar en ListaDoble
-      listaDoble.cabeza = null; listaDoble.cola = null; listaDoble.tamano = 0; listaDoble._cursor = null;
-      todosTramites.forEach(t => listaDoble.insertar(t));
-      render(todosTramites);
-    } catch (e) {
-      el.innerHTML = `<div class="alert alert-danger">${e.message}</div>`;
-    }
-  }
-
-  // Filtros
-  function aplicarFiltros() {
-    const estado = document.getElementById('filtro-estado').value;
-    const q = document.getElementById('buscador').value.toLowerCase();
-    const filtrados = todosTramites.filter(t =>
-      (!estado || t.estado === estado) &&
-      (!q || t.tipo.includes(q) || (t.descripcion||'').toLowerCase().includes(q)));
-    render(filtrados);
-  }
-  document.getElementById('filtro-estado').addEventListener('change', aplicarFiltros);
-  document.getElementById('buscador').addEventListener('input', aplicarFiltros);
-
-  // Navegación Lista Doble
-  document.getElementById('btn-siguiente').addEventListener('click', () => {
-    const dato = listaDoble.siguiente();
-    if (dato) {
-      document.getElementById('expediente-info').textContent =
-        ` ${dato.tipo} — ${dato.descripcion||'Sin desc.'} (${dato.estado})`;
-      document.getElementById('detalle-navegacion').hidden = false;
-    }
-  });
-  document.getElementById('btn-anterior').addEventListener('click', () => {
-    const dato = listaDoble.anterior();
-    if (dato) {
-      document.getElementById('expediente-info').textContent =
-        ` ${dato.tipo} — ${dato.descripcion||'Sin desc.'} (${dato.estado})`;
-      document.getElementById('detalle-navegacion').hidden = false;
-    }
-  });
-
-  // Cambiar estado
-  el.addEventListener('change', async (e) => {
-    const sel = e.target.closest('[data-tramite]');
-    if (!sel || !sel.value) return;
-    try {
-      await actualizarEstadoTramite(sel.dataset.tramite, sel.value, usuario.id);
-      await cargar();
-    } catch (err) { alert(err.message); }
-  });
-
-  await cargar();
-</script>
+    document.addEventListener("submit", async (event) => {
+      const form = event.target.closest("[data-asignar-tramite]");
+      if (!form) return;
+      event.preventDefault();
+      const tramiteId = Number(form.dataset.asignarTramite);
+      const empleadoId = Number(new FormData(form).get("empleadoId"));
+      if (!empleadoId) return;
+      try {
+        await SmartCampusAPI.parseJson(await SmartCampusAPI.asignarEmpleadoTramite(tramiteId, empleadoId));
+        window.location.reload();
+      } catch (error) {
+        alert(error.message);
+      }
+    });
+  </script>
 </body>
 </html>

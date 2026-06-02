@@ -1,262 +1,36 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Rutas - SmartCampus UTA</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gestion de rutas - Administrador</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-  <link rel="stylesheet" href="../../assets/css/style.css">
-  <style>#campus-canvas{width:100%;height:400px;border:1px solid var(--line);border-radius:8px;background:#f8fbff}</style>
-</head>
-<body>
-<div id="sc-navbar"></div>
-<main class="container py-4">
-  <header class="page-header d-flex justify-content-between align-items-center">
-    <div>
-      <h1>🗺️ Gestión de Rutas (Grafo)</h1>
-      <p class="text-muted">Agregar nodos y conexiones al grafo del campus. Dijkstra calcula rutas óptimas.</p>
-    </div>
-    <a href="dashboard.html" class="btn btn-outline-secondary">← Volver</a>
-  </header>
-
-  <div class="row g-4">
-    <div class="col-md-4">
-      <!-- Agregar nodo -->
-      <section class="content-panel p-4 mb-3">
-        <h2 class="h5 mb-3">Agregar punto del campus</h2>
-        <div id="nodo-msg" hidden class="alert"></div>
-        <form id="form-nodo">
-          <div class="mb-2">
-            <label class="form-label">Nombre</label>
-            <input class="form-control form-control-sm" id="nodo-nombre" placeholder="Ej. Laboratorio A" required>
-          </div>
-          <div class="mb-2">
-            <label class="form-label">Tipo</label>
-            <select class="form-select form-select-sm" id="nodo-tipo">
-              <option value="edificio">Edificio</option>
-              <option value="entrada">Entrada</option>
-              <option value="parqueadero">Parqueadero</option>
-              <option value="area_verde">Área verde</option>
-              <option value="cafeteria">Cafetería</option>
-            </select>
-          </div>
-          <div class="row g-2 mb-2">
-            <div class="col"><input class="form-control form-control-sm" id="nodo-x" type="number" placeholder="Pos X" required></div>
-            <div class="col"><input class="form-control form-control-sm" id="nodo-y" type="number" placeholder="Pos Y" required></div>
-          </div>
-          <button class="btn btn-primary btn-sm w-100" type="submit">Agregar nodo</button>
-        </form>
-      </section>
-
-      <!-- Agregar arista -->
-      <section class="content-panel p-4">
-        <h2 class="h5 mb-3">Conectar puntos</h2>
-        <div id="ruta-msg" hidden class="alert"></div>
-        <form id="form-ruta">
-          <div class="mb-2">
-            <label class="form-label">Desde</label>
-            <select class="form-select form-select-sm" id="ruta-origen"></select>
-          </div>
-          <div class="mb-2">
-            <label class="form-label">Hasta</label>
-            <select class="form-select form-select-sm" id="ruta-destino"></select>
-          </div>
-          <div class="mb-2">
-            <label class="form-label">Distancia (m)</label>
-            <input class="form-control form-control-sm" id="ruta-dist" type="number" min="1" placeholder="150" required>
-          </div>
-          <button class="btn btn-primary btn-sm w-100" type="submit">Conectar</button>
-        </form>
-      <!-- Conexiones registradas -->
-      <section class="content-panel p-4 mt-4">
-        <h2 class="h5 mb-3">Conexiones actuales</h2>
-        <div id="tabla-rutas">
-          <div class="spinner-block text-center"><div class="spinner-border text-primary" role="status"></div></div>
-        </div>
-      </section>
-    </div>
-
-    <div class="col-md-8">
-      <canvas id="campus-canvas"></canvas>
-      <div class="mt-3">
-        <div class="d-flex gap-2 mb-2">
-          <select class="form-select" id="dij-origen"></select>
-          <select class="form-select" id="dij-destino"></select>
-          <button class="btn btn-warning" id="btn-dijkstra">Dijkstra</button>
-        </div>
-        <div id="dij-resultado" hidden class="mock-note"></div>
+  <link rel="stylesheet" href="../../assets/css/styles.css">
+  <link rel="stylesheet" href="../../assets/css/admin.css">
+  </head>
+<body class="admin-accent">
+  <div class="app-shell">
+    <div data-navbar></div>
+    <main class="container py-4">
+      <div class="page-header">
+        <h1>Gestion de rutas</h1>
+        <p class="text-muted">Editor visual del grafo del campus FISEI.</p>
       </div>
-    </div>
+      <section class="content-panel">
+        <div class="d-flex gap-2 mb-3"><button class="btn btn-warning">Agregar nodo</button><button class="btn btn-outline-primary">Agregar conexion</button></div>
+        <canvas class="graph-canvas" data-graph></canvas>
+      </section>
+    </main>
+    <div data-footer></div>
   </div>
-</main>
-
-<footer class="footer text-center mt-4">
-  <div class="container"><p class="mb-0">SmartCampus UTA · 2025</p></div>
-</footer>
-
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-<script type="module">
-  import { requireSession } from '../../assets/js/auth.js';
-  import { obtenerNodosCampus, obtenerRutasCampus, crearNodo, crearRuta, eliminarRuta } from '../../../src/Persistence/supabaseClient.js';
-  import { Grafo } from '../../../src/Domain/DataStructures/Grafo.js';
-
-  const usuario = requireSession();
-  if (!usuario || usuario.rol !== 'admin') { window.location.href = '../../index.html'; }
-
-  const grafo = new Grafo();
-  let nodosRaw = [], rutaResaltada = [];
-  const canvas = document.getElementById('campus-canvas');
-  const ctx = canvas.getContext('2d');
-  const tablaRutasEl = document.getElementById('tabla-rutas');
-
-  function fillSelects(nodos, ...selects) {
-    selects.forEach(sel => {
-      const v = sel.value;
-      sel.innerHTML = '';
-      nodos.forEach(n => {
-        const o = document.createElement('option'); o.value = n.id; o.textContent = n.nombre; sel.appendChild(o);
-      });
-      if (v) sel.value = v;
-    });
-  }
-
-  function escalar(nodos) {
-    if (!nodos.length) return nodos;
-    const pad = 60;
-    const rect = canvas.getBoundingClientRect();
-    const W = rect.width - pad*2, H = (rect.height||400) - pad*2;
-    const minX = Math.min(...nodos.map(n=>n.pos_x)), maxX = Math.max(...nodos.map(n=>n.pos_x));
-    const minY = Math.min(...nodos.map(n=>n.pos_y)), maxY = Math.max(...nodos.map(n=>n.pos_y));
-    return nodos.map(n => ({
-      ...n,
-      cx: pad + ((n.pos_x-minX)/(maxX-minX||1))*W,
-      cy: pad + ((n.pos_y-minY)/(maxY-minY||1))*H
-    }));
-  }
-
-  function dibujar(rutaIds=[]) {
-    const dpr = window.devicePixelRatio||1;
-    const rect = canvas.getBoundingClientRect();
-    canvas.width = rect.width*dpr; canvas.height = (rect.height||400)*dpr;
-    ctx.setTransform(dpr,0,0,dpr,0,0);
-    const nodos = escalar(nodosRaw);
-    const mapa = new Map(nodos.map(n=>[n.id,n]));
-    ctx.clearRect(0,0,rect.width,rect.height||400);
-    // Aristas
-    const dibujadas = new Set();
-    ctx.strokeStyle='#d9e2ec'; ctx.lineWidth=2;
-    for(const{origen,destino} of grafo.obtenerAristas()) {
-      const k=[origen,destino].sort().join('-'); if(dibujadas.has(k)) continue; dibujadas.add(k);
-      const a=mapa.get(origen),b=mapa.get(destino); if(!a||!b) continue;
-      ctx.beginPath(); ctx.moveTo(a.cx,a.cy); ctx.lineTo(b.cx,b.cy); ctx.stroke();
-      // Label distancia
-      const mx=(a.cx+b.cx)/2, my=(a.cy+b.cy)/2;
-      const dist = grafo.adyacencias.get(origen)?.find(e=>e.destino===destino)?.distancia;
-      if(dist){ctx.fillStyle='#667085';ctx.font='11px Inter';ctx.fillText(dist+'m',mx,my);}
-    }
-    // Ruta resaltada
-    if(rutaIds.length>1){
-      ctx.strokeStyle='#e87a2a';ctx.lineWidth=5;ctx.beginPath();
-      rutaIds.forEach((id,i)=>{const n=mapa.get(id);if(!n)return;i===0?ctx.moveTo(n.cx,n.cy):ctx.lineTo(n.cx,n.cy);});
-      ctx.stroke();
-    }
-    // Nodos
-    nodos.forEach(n=>{
-      ctx.fillStyle=rutaIds.includes(n.id)?'#e87a2a':'#0b3b5f';
-      ctx.beginPath();ctx.arc(n.cx,n.cy,14,0,Math.PI*2);ctx.fill();
-      ctx.fillStyle='#17212b';ctx.font='600 12px Inter';ctx.fillText(n.nombre,n.cx+18,n.cy+4);
-    });
-  }
-
-  async function cargarRutas() {
-    try {
-      const rutas = await obtenerRutasCampus();
-      const nodoMap = new Map(nodosRaw.map(n => [n.id, n]));
-      if (!rutas.length) { tablaRutasEl.innerHTML = '<p class="text-muted">No hay conexiones registradas.</p>'; return; }
-      tablaRutasEl.innerHTML = `<div class="table-responsive"><table class="table table-sm table-hover">
-        <thead><tr><th>Origen</th><th>Destino</th><th>Distancia</th><th>Bidireccional</th><th>Acción</th></tr></thead>
-        <tbody>${rutas.map(r=>`<tr>
-          <td>${nodoMap.get(r.nodo_origen_id)?.nombre || 'N/A'}</td>
-          <td>${nodoMap.get(r.nodo_destino_id)?.nombre || 'N/A'}</td>
-          <td>${r.distancia} m</td>
-          <td>${r.bidireccional ? 'Sí' : 'No'}</td>
-          <td><button class="btn btn-danger btn-sm" data-eliminar="${r.id}">✕</button></td>
-        </tr>`).join('')}</tbody>
-      </table></div>`;
-    } catch (e) { tablaRutasEl.innerHTML = `<div class="alert alert-danger">${e.message}</div>`; }
-  }
-
-  async function recargar() {
-    const [nodos, rutas] = await Promise.all([obtenerNodosCampus(), obtenerRutasCampus()]);
-    nodosRaw = nodos;
-    grafo.nodos.clear(); grafo.adyacencias.clear();
-    grafo.construirDesdeSupabase(nodos, rutas);
-    fillSelects(nodos,
-      document.getElementById('ruta-origen'), document.getElementById('ruta-destino'),
-      document.getElementById('dij-origen'), document.getElementById('dij-destino'));
-    await cargarRutas();
-    dibujar(rutaResaltada);
-  }
-
-  document.getElementById('form-nodo').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const msg = document.getElementById('nodo-msg');
-    msg.hidden = true;
-    try {
-      await crearNodo(
-        document.getElementById('nodo-nombre').value,
-        document.getElementById('nodo-tipo').value,
-        parseFloat(document.getElementById('nodo-x').value),
-        parseFloat(document.getElementById('nodo-y').value)
-      );
-      msg.className='alert alert-success'; msg.textContent='Nodo agregado.'; msg.hidden=false;
-      e.target.reset(); await recargar();
-    } catch(err){msg.className='alert alert-danger';msg.textContent=err.message;msg.hidden=false;}
-  });
-
-  document.getElementById('form-ruta').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const msg = document.getElementById('ruta-msg');
-    msg.hidden=true;
-    try {
-      await crearRuta(
-        document.getElementById('ruta-origen').value,
-        document.getElementById('ruta-destino').value,
-        parseFloat(document.getElementById('ruta-dist').value)
-      );
-      msg.className='alert alert-success';msg.textContent='Conexión creada.';msg.hidden=false;
-      e.target.reset(); await recargar();
-    } catch(err){msg.className='alert alert-danger';msg.textContent=err.message;msg.hidden=false;}
-  });
-
-  tablaRutasEl.addEventListener('click', async (e) => {
-    const btn = e.target.closest('[data-eliminar]');
-    if (btn) {
-      if (!confirm('¿Eliminar esta conexión?')) return;
-      try {
-        await eliminarRuta(btn.dataset.eliminar);
-        await recargar();
-      } catch (err) { alert(err.message); }
-    }
-  });
-
-  document.getElementById('btn-dijkstra').addEventListener('click', () => {
-    const o = document.getElementById('dij-origen').value;
-    const d = document.getElementById('dij-destino').value;
-    if(o===d){alert('Selecciona puntos diferentes.');return;}
-    const{distancia,ruta} = grafo.dijkstra(o,d);
-    rutaResaltada = ruta;
-    const el = document.getElementById('dij-resultado');
-    if(!ruta.length||distancia===Infinity){
-      el.innerHTML='<span class="text-danger">No hay ruta disponible.</span>';
-    } else {
-      const nombres = ruta.map(id=>grafo.nodos.get(id)?.nombre||id).join(' → ');
-      el.innerHTML = `<strong>Ruta: </strong>${nombres}<br><small>Distancia: <strong>${distancia.toFixed(0)} m</strong></small>`;
-    }
-    el.hidden=false; dibujar(ruta);
-  });
-
-  window.addEventListener('resize', () => dibujar(rutaResaltada));
-  await recargar();
-</script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="../../assets/js/config.js"></script>
+  <script src="../../assets/js/utils.js"></script>
+  <script type="module" src="../../assets/js/api.js"></script>
+  <script type="module" src="../../assets/js/auth.js"></script>
+  <script src="../../assets/js/componentes/navbar.js"></script>
+  <script src="../../assets/js/componentes/footer.js"></script>
+  <script src="../../assets/js/estructuras/grafo.js"></script>
+  <script>document.addEventListener("DOMContentLoaded",()=>SmartCampusGrafo.render("[data-graph]"));</script>
 </body>
 </html>

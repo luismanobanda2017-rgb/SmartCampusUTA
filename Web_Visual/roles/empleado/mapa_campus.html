@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mapa Campus - Empleado</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="../../assets/css/style.css">
+</head>
+<body>
+<div id="sc-navbar"></div>
+<main class="container py-4">
+  <header class="page-header d-flex justify-content-between align-items-center">
+    <div>
+      <h1>🗺️ Mapa del Campus</h1>
+      <p class="text-muted">Vista del mapa y calculadora de rutas (lectura para empleados).</p>
+    </div>
+    <a href="dashboard.html" class="btn btn-outline-secondary">← Volver</a>
+  </header>
+
+  <section class="content-panel p-4 mt-3">
+    <canvas id="campus-canvas" style="width:100%;height:400px;border:1px solid var(--line);border-radius:8px;background:#f8fbff"></canvas>
+    <div class="mt-3"><p class="text-muted">Interfaz Dijkstra compartida con administrador/estudiante.</p></div>
+  </section>
+</main>
+
+<footer class="footer text-center mt-4">
+  <div class="container"><p class="mb-0">SmartCampus UTA · 2025</p></div>
+</footer>
+
+<script type="module">
+  import { requireSession } from '../../assets/js/auth.js';
+  const usuario = requireSession(); if (!usuario || usuario.rol !== 'empleado') { window.location.href='../../../index.html'; }
+</script>
+</body>
+</html>
