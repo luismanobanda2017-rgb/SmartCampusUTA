@@ -1,12 +1,9 @@
 // ============================================================
-// SmartCampus UTA — generarPDF.js
-// Generación de reportes PDF usando jsPDF (CDN)
-// Uso: import { generarReportePDF } from './generarPDF.js';
+// SmartCampus UTA - generarPDF.js
+// Generacion de reportes PDF usando jsPDF (CDN)
 // ============================================================
 
-/**
- * Carga jsPDF desde CDN si aún no está cargado.
- */
+/** Carga jsPDF desde CDN si no esta disponible */
 async function cargarJsPDF() {
   if (window.jspdf) return window.jspdf.jsPDF;
   await new Promise((resolve, reject) => {
@@ -19,17 +16,38 @@ async function cargarJsPDF() {
   return window.jspdf.jsPDF;
 }
 
-// ─── Helpers ────────────────────────────────────────────────
-function fechaHoy() {
-  return new Date().toLocaleDateString('es-EC', { day:'2-digit', month:'long', year:'numeric' });
+/** Limpia caracteres que jsPDF no puede renderizar con helvetica */
+function limpiar(str) {
+  if (str === null || str === undefined) return '-';
+  return String(str)
+    .replace(/[—–]/g, '-')
+    .replace(/[…]/g, '...')
+    .replace(/[·•]/g, '.')
+    .replace(/[áàä]/g, 'a')
+    .replace(/[éèë]/g, 'e')
+    .replace(/[íìï]/g, 'i')
+    .replace(/[óòö]/g, 'o')
+    .replace(/[úùü]/g, 'u')
+    .replace(/[Á]/g, 'A')
+    .replace(/[É]/g, 'E')
+    .replace(/[Í]/g, 'I')
+    .replace(/[Ó]/g, 'O')
+    .replace(/[Ú]/g, 'U')
+    .replace(/[ñ]/g, 'n')
+    .replace(/[Ñ]/g, 'N')
+    .replace(/[^a-zA-Z0-9\s\-_.,;:()/\\@#%&+=?!'"\[\]{}]/g, '');
 }
 
+function fechaHoy() {
+  const d = new Date();
+  return `${d.getDate().toString().padStart(2,'0')}/${(d.getMonth()+1).toString().padStart(2,'0')}/${d.getFullYear()}`;
+}
+
+// ── Encabezado de pagina ────────────────────────────────────
 function encabezado(doc, titulo, subtitulo, usuario) {
-  // Franja superior
-  doc.setFillColor(11, 59, 95);   // --uta-blue
+  doc.setFillColor(11, 59, 95);
   doc.rect(0, 0, 210, 22, 'F');
 
-  // Logo texto
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(13);
   doc.setTextColor(255, 255, 255);
@@ -38,33 +56,34 @@ function encabezado(doc, titulo, subtitulo, usuario) {
   doc.setFontSize(8);
   doc.setFont('helvetica', 'normal');
   doc.text('Universidad Tecnica de Ambato - FISEI', 14, 15);
-
-  // Fecha
   doc.text(fechaHoy(), 196, 9, { align: 'right' });
 
-  // Título del reporte
   doc.setTextColor(17, 33, 43);
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(15);
-  doc.text(titulo, 14, 32);
+  doc.text(limpiar(titulo), 14, 32);
 
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(9);
-  doc.setTextColor(102, 112, 133);
-  doc.text(subtitulo, 14, 38);
-
-  if (usuario) {
-    doc.text(`Usuario: ${usuario.nombre} · Rol: ${usuario.rol}`, 14, 44);
+  if (subtitulo) {
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    doc.setTextColor(102, 112, 133);
+    doc.text(limpiar(subtitulo), 14, 38);
   }
 
-  // Línea separadora naranja
+  if (usuario) {
+    doc.setFontSize(8);
+    doc.setTextColor(102, 112, 133);
+    doc.text('Usuario: ' + limpiar(usuario.nombre) + '  |  Rol: ' + limpiar(usuario.rol), 14, 44);
+  }
+
   doc.setDrawColor(232, 122, 42);
   doc.setLineWidth(0.8);
   doc.line(14, 47, 196, 47);
 
-  return 52; // y cursor después del encabezado
+  return 52;
 }
 
+// ── Pie de pagina ───────────────────────────────────────────
 function piePagina(doc) {
   const total = doc.internal.getNumberOfPages();
   for (let i = 1; i <= total; i++) {
@@ -74,99 +93,34 @@ function piePagina(doc) {
     doc.setFontSize(7);
     doc.setTextColor(219, 230, 239);
     doc.setFont('helvetica', 'normal');
-    doc.text('SmartCampus UTA · Universidad Técnica de Ambato · 2025', 14, 291);
-    doc.text(`Página ${i} de ${total}`, 196, 291, { align: 'right' });
+    doc.text('SmartCampus UTA - Universidad Tecnica de Ambato - 2025', 14, 291);
+    doc.text('Pagina ' + i + ' de ' + total, 196, 291, { align: 'right' });
   }
 }
 
-/**
- * Dibuja una tabla simple.
- * @param {jsPDF} doc
- * @param {number} y - cursor Y de inicio
- * @param {string[]} cols - encabezados
- * @param {string[][]} rows - filas de datos
- * @param {number[]} widths - anchos de columna en mm
- * @returns {number} nuevo cursor Y
- */
-function tabla(doc, y, cols, rows, widths) {
-  const rowH   = 7;
-  const margin = 14;
-  const totalW = widths.reduce((a, b) => a + b, 0);
-
-  // Encabezado de tabla
-  doc.setFillColor(11, 59, 95);
-  doc.rect(margin, y, totalW, rowH, 'F');
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(8);
-  doc.setTextColor(255, 255, 255);
-
-  let x = margin;
-  cols.forEach((col, i) => {
-    doc.text(col, x + 2, y + 5);
-    x += widths[i];
-  });
-  y += rowH;
-
-  // Filas
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(7.5);
-
-  rows.forEach((row, ri) => {
-    // Fila alterna
-    if (ri % 2 === 0) {
-      doc.setFillColor(245, 245, 245);
-      doc.rect(margin, y, totalW, rowH, 'F');
-    }
-    doc.setTextColor(23, 33, 43);
-
-    x = margin;
-    row.forEach((cell, ci) => {
-      const txt = String(cell ?? '—');
-      const maxChars = Math.floor(widths[ci] / 2.2);
-      const truncated = txt.length > maxChars ? txt.slice(0, maxChars - 1) + '…' : txt;
-      doc.text(truncated, x + 2, y + 5);
-      x += widths[ci];
-    });
-
-    // Borde inferior de fila
-    doc.setDrawColor(217, 226, 236);
-    doc.setLineWidth(0.2);
-    doc.line(margin, y + rowH, margin + totalW, y + rowH);
-
-    y += rowH;
-
-    // Salto de página si es necesario
-    if (y > 272) {
-      doc.addPage();
-      y = encabezado(doc, '', '', null) - 10;
-    }
-  });
-
-  return y + 4;
-}
-
+// ── Titulo de seccion ───────────────────────────────────────
 function seccion(doc, y, texto) {
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(10);
   doc.setTextColor(11, 59, 95);
-  doc.text(texto, 14, y);
+  doc.text(limpiar(texto), 14, y);
   doc.setDrawColor(232, 122, 42);
   doc.setLineWidth(0.4);
   doc.line(14, y + 1.5, 196, y + 1.5);
   return y + 7;
 }
 
+// ── Fila de KPIs ────────────────────────────────────────────
 function kpiFila(doc, y, kpis) {
-  // kpis: [{ label, value }]
   const boxW = Math.floor(182 / kpis.length);
-  let   x    = 14;
+  let x = 14;
   kpis.forEach(k => {
     doc.setFillColor(245, 247, 250);
     doc.roundedRect(x, y, boxW - 2, 16, 2, 2, 'F');
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(7.5);
     doc.setTextColor(102, 112, 133);
-    doc.text(k.label, x + 3, y + 6);
+    doc.text(limpiar(k.label), x + 3, y + 6);
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(13);
     doc.setTextColor(11, 59, 95);
@@ -176,8 +130,62 @@ function kpiFila(doc, y, kpis) {
   return y + 22;
 }
 
+// ── Tabla ───────────────────────────────────────────────────
+function tabla(doc, y, cols, rows, widths) {
+  const rowH   = 7;
+  const margin = 14;
+  const totalW = widths.reduce((a, b) => a + b, 0);
+
+  // Cabecera
+  doc.setFillColor(11, 59, 95);
+  doc.rect(margin, y, totalW, rowH, 'F');
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8);
+  doc.setTextColor(255, 255, 255);
+
+  let x = margin;
+  cols.forEach((col, i) => {
+    doc.text(limpiar(col), x + 2, y + 5);
+    x += widths[i];
+  });
+  y += rowH;
+
+  // Filas
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7.5);
+
+  rows.forEach((row, ri) => {
+    if (ri % 2 === 0) {
+      doc.setFillColor(245, 245, 245);
+      doc.rect(margin, y, totalW, rowH, 'F');
+    }
+    doc.setTextColor(23, 33, 43);
+
+    x = margin;
+    row.forEach((cell, ci) => {
+      const txt      = limpiar(cell);
+      const maxChars = Math.floor(widths[ci] / 2.2);
+      const cortado  = txt.length > maxChars ? txt.slice(0, maxChars - 1) + '.' : txt;
+      doc.text(cortado, x + 2, y + 5);
+      x += widths[ci];
+    });
+
+    doc.setDrawColor(217, 226, 236);
+    doc.setLineWidth(0.2);
+    doc.line(margin, y + rowH, margin + totalW, y + rowH);
+    y += rowH;
+
+    if (y > 272) {
+      doc.addPage();
+      y = encabezado(doc, '', '', null) - 10;
+    }
+  });
+
+  return y + 4;
+}
+
 // ══════════════════════════════════════════════════════════════
-// PDF ADMINISTRADOR — Reporte completo del sistema
+// PDF ADMINISTRADOR
 // ══════════════════════════════════════════════════════════════
 export async function pdfAdmin({ usuario, usuarios, tramites, turnos, nodos, acciones }) {
   const jsPDF = await cargarJsPDF();
@@ -185,33 +193,31 @@ export async function pdfAdmin({ usuario, usuarios, tramites, turnos, nodos, acc
 
   let y = encabezado(doc, 'Reporte del Sistema', 'Resumen completo de metricas y actividad', usuario);
 
-  // KPIs
   y = seccion(doc, y, 'Indicadores clave');
   y = kpiFila(doc, y, [
-    { label: 'Usuarios totales',  value: usuarios.length },
-    { label: 'Trámites',         value: tramites.length },
-    { label: 'Pendientes',        value: tramites.filter(t => t.estado === 'pendiente').length },
-    { label: 'Turnos totales',    value: turnos.length },
-    { label: 'Nodos campus',      value: nodos.length },
+    { label: 'Usuarios totales', value: usuarios.length },
+    { label: 'Tramites',         value: tramites.length },
+    { label: 'Pendientes',       value: tramites.filter(t => t.estado === 'pendiente').length },
+    { label: 'Turnos totales',   value: turnos.length },
+    { label: 'Nodos campus',     value: nodos.length },
   ]);
   y += 4;
 
-  // Tabla usuarios
-  y = seccion(doc, y, 'Usuarios registrados');  y = tabla(doc, y,
+  y = seccion(doc, y, 'Usuarios registrados');
+  y = tabla(doc, y,
     ['Nombre', 'Email', 'Rol', 'Registrado'],
     usuarios.map(u => [u.nombre, u.email, u.rol, new Date(u.created_at).toLocaleDateString('es-EC')]),
     [52, 62, 28, 40]
   );
   y += 2;
 
-  // Tabla trámites
   if (tramites.length) {
     y = seccion(doc, y, 'Tramites del sistema');
     y = tabla(doc, y,
-      ['Tipo', 'Descripción', 'Estado', 'Usuario', 'Fecha'],
+      ['Tipo', 'Descripcion', 'Estado', 'Usuario', 'Fecha'],
       tramites.slice(0, 40).map(t => [
-        t.tipo, t.descripcion || '—', t.estado,
-        t.usuarios?.nombre || '—',
+        t.tipo, t.descripcion || '-', t.estado,
+        t.usuarios?.nombre || '-',
         new Date(t.created_at).toLocaleDateString('es-EC'),
       ]),
       [35, 50, 28, 42, 27]
@@ -219,14 +225,13 @@ export async function pdfAdmin({ usuario, usuarios, tramites, turnos, nodos, acc
     y += 2;
   }
 
-  // Tabla turnos
   if (turnos.length) {
     y = seccion(doc, y, 'Turnos recientes');
     y = tabla(doc, y,
       ['Servicio', 'Estado', 'Usuario', 'Fecha'],
       turnos.slice(0, 30).map(t => [
-        t.servicio || '—', t.estado,
-        t.usuarios?.nombre || '—',
+        t.servicio || '-', t.estado,
+        t.usuarios?.nombre || '-',
         new Date(t.created_at).toLocaleDateString('es-EC'),
       ]),
       [45, 35, 60, 42]
@@ -234,14 +239,13 @@ export async function pdfAdmin({ usuario, usuarios, tramites, turnos, nodos, acc
     y += 2;
   }
 
-  // Bitácora
   if (acciones.length) {
     y = seccion(doc, y, 'Bitacora de acciones recientes');
     y = tabla(doc, y,
-      ['Acción', 'Descripción', 'Usuario', 'Fecha'],
+      ['Accion', 'Descripcion', 'Usuario', 'Fecha'],
       acciones.slice(0, 25).map(a => [
-        a.tipo_accion || '—', a.descripcion || '—',
-        a.usuarios?.nombre || '—',
+        a.tipo_accion || '-', a.descripcion || '-',
+        a.usuarios?.nombre || '-',
         new Date(a.created_at).toLocaleString('es-EC'),
       ]),
       [38, 65, 45, 34]
@@ -249,11 +253,11 @@ export async function pdfAdmin({ usuario, usuarios, tramites, turnos, nodos, acc
   }
 
   piePagina(doc);
-  doc.save(`reporte_admin_${Date.now()}.pdf`);
+  doc.save('reporte_admin_' + Date.now() + '.pdf');
 }
 
 // ══════════════════════════════════════════════════════════════
-// PDF ESTUDIANTE — Mis trámites y turnos
+// PDF ESTUDIANTE
 // ══════════════════════════════════════════════════════════════
 export async function pdfEstudiante({ usuario, tramites, turnos }) {
   const jsPDF = await cargarJsPDF();
@@ -261,40 +265,37 @@ export async function pdfEstudiante({ usuario, tramites, turnos }) {
 
   let y = encabezado(doc, 'Mi Reporte Personal', 'Historial de tramites y turnos', usuario);
 
-  // KPIs
   y = seccion(doc, y, 'Resumen de actividad');
   y = kpiFila(doc, y, [
-    { label: 'Trámites totales',   value: tramites.length },
+    { label: 'Tramites totales',   value: tramites.length },
     { label: 'Pendientes',         value: tramites.filter(t => t.estado === 'pendiente').length },
     { label: 'Completados',        value: tramites.filter(t => t.estado === 'completado').length },
     { label: 'Turnos solicitados', value: turnos.length },
   ]);
   y += 4;
 
-  // Tabla trámites estudiante
   y = seccion(doc, y, 'Mis tramites');
   if (tramites.length) {
     y = tabla(doc, y,
-      ['Tipo', 'Descripción', 'Estado', 'Fecha'],
+      ['Tipo', 'Descripcion', 'Estado', 'Fecha'],
       tramites.map(t => [
-        t.tipo, t.descripcion || '—', t.estado,
+        t.tipo, t.descripcion || '-', t.estado,
         new Date(t.created_at).toLocaleDateString('es-EC'),
       ]),
       [40, 75, 35, 32]
     );
   } else {
     doc.setFontSize(9); doc.setTextColor(102, 112, 133);
-    doc.text('No tienes trámites registrados.', 14, y); y += 8;
+    doc.text('No tienes tramites registrados.', 14, y); y += 8;
   }
   y += 2;
 
-  // Tabla turnos
   y = seccion(doc, y, 'Mis turnos');
   if (turnos.length) {
     y = tabla(doc, y,
       ['Servicio', 'Estado', 'Fecha'],
       turnos.map(t => [
-        t.servicio || '—', t.estado,
+        t.servicio || '-', t.estado,
         new Date(t.created_at).toLocaleDateString('es-EC'),
       ]),
       [65, 45, 72]
@@ -305,11 +306,11 @@ export async function pdfEstudiante({ usuario, tramites, turnos }) {
   }
 
   piePagina(doc);
-  doc.save(`mi_reporte_${usuario.nombre.replace(/\s+/g, '_')}_${Date.now()}.pdf`);
+  doc.save('mi_reporte_' + limpiar(usuario.nombre).replace(/\s+/g, '_') + '_' + Date.now() + '.pdf');
 }
 
 // ══════════════════════════════════════════════════════════════
-// PDF EMPLEADO — Trámites gestionados y turnos atendidos
+// PDF EMPLEADO
 // ══════════════════════════════════════════════════════════════
 export async function pdfEmpleado({ usuario, tramites, turnos }) {
   const jsPDF = await cargarJsPDF();
@@ -317,43 +318,40 @@ export async function pdfEmpleado({ usuario, tramites, turnos }) {
 
   let y = encabezado(doc, 'Reporte de Gestion', 'Tramites procesados y turnos atendidos', usuario);
 
-  // KPIs
   y = seccion(doc, y, 'Resumen operativo');
   y = kpiFila(doc, y, [
-    { label: 'Trámites en sistema', value: tramites.length },
+    { label: 'Tramites en sistema', value: tramites.length },
     { label: 'Pendientes',          value: tramites.filter(t => t.estado === 'pendiente').length },
     { label: 'Aprobados',           value: tramites.filter(t => t.estado === 'aprobado').length },
     { label: 'Turnos en espera',    value: turnos.filter(t => t.estado === 'esperando').length },
-    { label: 'Turnos finalizados',  value: turnos.filter(t => t.estado === 'finalizado').length },
+    { label: 'Finalizados',         value: turnos.filter(t => t.estado === 'finalizado').length },
   ]);
   y += 4;
 
-  // Tabla trámites empleado
   y = seccion(doc, y, 'Tramites pendientes y procesados');
   if (tramites.length) {
     y = tabla(doc, y,
       ['Tipo', 'Estado', 'Solicitante', 'Fecha'],
       tramites.map(t => [
         t.tipo, t.estado,
-        t.usuarios?.nombre || '—',
+        t.usuarios?.nombre || '-',
         new Date(t.created_at).toLocaleDateString('es-EC'),
       ]),
       [48, 35, 65, 34]
     );
   } else {
     doc.setFontSize(9); doc.setTextColor(102, 112, 133);
-    doc.text('No hay trámites registrados.', 14, y); y += 8;
+    doc.text('No hay tramites registrados.', 14, y); y += 8;
   }
   y += 2;
 
-  // Tabla turnos empleado
   y = seccion(doc, y, 'Cola de turnos');
   if (turnos.length) {
     y = tabla(doc, y,
       ['Servicio', 'Estado', 'Usuario', 'Fecha'],
       turnos.map(t => [
-        t.servicio || '—', t.estado,
-        t.usuarios?.nombre || '—',
+        t.servicio || '-', t.estado,
+        t.usuarios?.nombre || '-',
         new Date(t.created_at).toLocaleDateString('es-EC'),
       ]),
       [45, 35, 62, 40]
@@ -364,5 +362,5 @@ export async function pdfEmpleado({ usuario, tramites, turnos }) {
   }
 
   piePagina(doc);
-  doc.save(`reporte_empleado_${usuario.nombre.replace(/\s+/g, '_')}_${Date.now()}.pdf`);
+  doc.save('reporte_empleado_' + limpiar(usuario.nombre).replace(/\s+/g, '_') + '_' + Date.now() + '.pdf');
 }
