@@ -22,7 +22,7 @@ export function obtenerSesion() {
 }
 export function cerrarSesion() {
     localStorage.removeItem('sc_usuario');
-    window.location.href = getRaiz() + 'index.html';
+    window.location.href = getRaiz() + 'login.html';
 }
 
 export function getRaiz() {
@@ -214,6 +214,11 @@ export async function crearRuta(nodo_origen_id, nodo_destino_id, distancia, bidi
     return data;
 }
 
+export async function eliminarRuta(id) {
+    const { error } = await supabase.from('rutas_campus').delete().eq('id', id);
+    if (error) throw new Error(error.message);
+}
+
 // ─── USUARIOS (ADMIN) ─────────────────────────────────────────────────────────
 export async function obtenerTodosUsuarios() {
     const { data, error } = await supabase.from('usuarios').select('id, nombre, email, rol, created_at').order('created_at', { ascending: false });
@@ -222,6 +227,10 @@ export async function obtenerTodosUsuarios() {
 }
 
 export async function actualizarRolUsuario(id, rol) {
+    const rolesValidos = ['estudiante', 'empleado', 'admin'];
+    if (!rolesValidos.includes(rol)) {
+        throw new Error(`Rol inválido. Debe ser uno de: ${rolesValidos.join(', ')}`);
+    }
     const { error } = await supabase.from('usuarios').update({ rol }).eq('id', id);
     if (error) throw new Error(error.message);
 }

@@ -66,6 +66,12 @@
           </div>
           <button class="btn btn-primary btn-sm w-100" type="submit">Conectar</button>
         </form>
+      <!-- Conexiones registradas -->
+      <section class="content-panel p-4 mt-4">
+        <h2 class="h5 mb-3">Conexiones actuales</h2>
+        <div id="tabla-rutas">
+          <div class="spinner-block text-center"><div class="spinner-border text-primary" role="status"></div></div>
+        </div>
       </section>
     </div>
 
@@ -90,7 +96,7 @@
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script type="module">
   import { requireSession } from '../../assets/js/auth.js';
-  import { obtenerNodosCampus, obtenerRutasCampus, crearNodo, crearRuta } from '../../../src/Persistence/supabaseClient.js';
+  import { obtenerNodosCampus, obtenerRutasCampus, crearNodo, crearRuta, eliminarRuta } from '../../../src/Persistence/supabaseClient.js';
   import { Grafo } from '../../../src/Domain/DataStructures/Grafo.js';
 
   const usuario = requireSession();
@@ -100,6 +106,7 @@
   let nodosRaw = [], rutaResaltada = [];
   const canvas = document.getElementById('campus-canvas');
   const ctx = canvas.getContext('2d');
+  const tablaRutasEl = document.getElementById('tabla-rutas');
 
   function fillSelects(nodos, ...selects) {
     selects.forEach(sel => {
@@ -160,6 +167,24 @@
     });
   }
 
+  async function cargarRutas() {
+    try {
+      const rutas = await obtenerRutasCampus();
+      const nodoMap = new Map(nodosRaw.map(n => [n.id, n]));
+      if (!rutas.length) { tablaRutasEl.innerHTML = '<p class="text-muted">No hay conexiones registradas.</p>'; return; }
+      tablaRutasEl.innerHTML = `<div class="table-responsive"><table class="table table-sm table-hover">
+        <thead><tr><th>Origen</th><th>Destino</th><th>Distancia</th><th>Bidireccional</th><th>Acción</th></tr></thead>
+        <tbody>${rutas.map(r=>`<tr>
+          <td>${nodoMap.get(r.nodo_origen_id)?.nombre || 'N/A'}</td>
+          <td>${nodoMap.get(r.nodo_destino_id)?.nombre || 'N/A'}</td>
+          <td>${r.distancia} m</td>
+          <td>${r.bidireccional ? 'Sí' : 'No'}</td>
+          <td><button class="btn btn-danger btn-sm" data-eliminar="${r.id}">✕</button></td>
+        </tr>`).join('')}</tbody>
+      </table></div>`;
+    } catch (e) { tablaRutasEl.innerHTML = `<div class="alert alert-danger">${e.message}</div>`; }
+  }
+
   async function recargar() {
     const [nodos, rutas] = await Promise.all([obtenerNodosCampus(), obtenerRutasCampus()]);
     nodosRaw = nodos;
@@ -168,6 +193,7 @@
     fillSelects(nodos,
       document.getElementById('ruta-origen'), document.getElementById('ruta-destino'),
       document.getElementById('dij-origen'), document.getElementById('dij-destino'));
+    await cargarRutas();
     dibujar(rutaResaltada);
   }
 
@@ -200,6 +226,17 @@
       msg.className='alert alert-success';msg.textContent='Conexión creada.';msg.hidden=false;
       e.target.reset(); await recargar();
     } catch(err){msg.className='alert alert-danger';msg.textContent=err.message;msg.hidden=false;}
+  });
+
+  tablaRutasEl.addEventListener('click', async (e) => {
+    const btn = e.target.closest('[data-eliminar]');
+    if (btn) {
+      if (!confirm('¿Eliminar esta conexión?')) return;
+      try {
+        await eliminarRuta(btn.dataset.eliminar);
+        await recargar();
+      } catch (err) { alert(err.message); }
+    }
   });
 
   document.getElementById('btn-dijkstra').addEventListener('click', () => {

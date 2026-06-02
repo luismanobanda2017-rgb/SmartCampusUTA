@@ -64,6 +64,7 @@
 <script type="module">
   import { requireSession } from '../../assets/js/auth.js';
   import { obtenerTodosUsuarios, obtenerTodosTramites, obtenerTurnosPorEstado, obtenerNodosCampus, obtenerHistorialAcciones } from '../../../src/Persistence/supabaseClient.js';
+  import { Pila } from '../../../src/Domain/DataStructures/Pila.js';
 
   const usuario = requireSession();
   if (!usuario || usuario.rol !== 'admin') { window.location.href = '../../index.html'; }
@@ -108,13 +109,17 @@
     document.getElementById('turnos-servicio').innerHTML = barChart(
       Object.entries(porServicio).map(([servicio,count])=>({servicio,count})), 'servicio', 'count', 'var(--fisei-orange)');
 
-    // Bitácora
+    // Bitácora con Pila (últimas 5 acciones)
+    const pila = new Pila(5);
+    acciones.forEach(a => pila.apilar(a));
+    const ultimas5 = pila.toArray();
+
     const bitEl = document.getElementById('bitacora-completa');
-    if (!acciones.length) { bitEl.innerHTML='<p class="text-muted">Sin acciones registradas.</p>'; }
+    if (!ultimas5.length) { bitEl.innerHTML='<p class="text-muted">Sin acciones registradas.</p>'; }
     else {
       bitEl.innerHTML = `<div class="table-responsive"><table class="table table-sm">
         <thead><tr><th>Acción</th><th>Descripción</th><th>Usuario</th><th>Fecha</th></tr></thead>
-        <tbody>${acciones.map(a=>`<tr>
+        <tbody>${ultimas5.map(a=>`<tr>
           <td><strong>${a.tipo_accion||'—'}</strong></td>
           <td>${a.descripcion||'—'}</td>
           <td>${a.usuarios?.nombre||'—'}</td>
@@ -126,9 +131,9 @@
     // Exportar CSV
     document.getElementById('btn-exportar').addEventListener('click', () => {
       const csv = ['Accion,Descripcion,Usuario,Fecha',
-        ...acciones.map(a=>`${a.tipo_accion||''},${(a.descripcion||'').replace(',',';')},${a.usuarios?.nombre||''},${a.created_at}`)
+        ...acciones.map(a=>`${a.tipo_accion||''},${(a.descripcion||'').replace(/,/g,';')},${a.usuarios?.nombre||''},${a.created_at}`)
       ].join('\n');
-      const blob = new Blob([csv], {type:'text/csv'});
+      const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a'); a.href=url; a.download='bitacora_smartcampus.csv'; a.click();
     });
