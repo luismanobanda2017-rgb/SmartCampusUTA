@@ -15,8 +15,13 @@
 
       <!-- Encabezado -->
       <header class="page-header mb-4">
-        <h1 class="fw-800 mb-1">👨‍💼 Panel Empleado</h1>
-        <p class="text-muted mb-0">Atención de turnos, trámites asignados y gestión interna.</p>
+        <div class="d-flex justify-content-between align-items-start">
+          <div>
+            <h1 class="fw-800 mb-1">👨‍💼 Panel Empleado</h1>
+            <p class="text-muted mb-0">Atención de turnos, trámites asignados y gestión interna.</p>
+          </div>
+          <button class="btn btn-danger btn-sm" id="btn-pdf">📄 Descargar reporte PDF</button>
+        </div>
       </header>
 
       <!-- KPIs -->
@@ -111,6 +116,7 @@
     import { requireSession } from '../../assets/js/auth.js';
     import { obtenerTurnosPorEstado, obtenerTodosTramites, atenderSiguienteTurno, finalizarTurno } from '../../../src/Persistence/supabaseClient.js';
     import { Cola } from '../../../src/Domain/DataStructures/Cola.js';
+    import { pdfEmpleado } from '../../assets/js/generarPDF.js';
 
     const usuario = requireSession();
     if (!usuario || usuario.rol !== 'empleado') {
@@ -118,6 +124,8 @@
     }
 
     const elTurnos = document.getElementById('turnos-list');
+    let turnosData  = [];
+    let tramitesData = [];
 
     async function cargarDashboard() {
       try {
@@ -126,26 +134,27 @@
           obtenerTodosTramites()
         ]);
 
+        turnosData   = turnos   || [];
+        tramitesData = tramites || [];
+
         // KPIs
-        document.getElementById('r-turnos').textContent = turnos?.length ?? 0;
-        const pendientes = tramites?.filter(t => t.estado === 'pendiente') ?? [];
+        document.getElementById('r-turnos').textContent = turnosData.length;
+        const pendientes = tramitesData.filter(t => t.estado === 'pendiente');
         document.getElementById('r-tramites').textContent = pendientes.length;
 
-        // Turno actual (primero en cola)
-        if (turnos?.length) {
-          document.getElementById('r-turno-actual').textContent = turnos[0].usuarios?.nombre || 'T-' + turnos[0].id;
+        if (turnosData.length) {
+          document.getElementById('r-turno-actual').textContent = turnosData[0].usuarios?.nombre || 'T-' + turnosData[0].id;
         } else {
           document.getElementById('r-turno-actual').textContent = 'Sin turnos';
         }
 
-        // Cola FIFO usando estructura Cola
-        if (!turnos?.length) {
+        if (!turnosData.length) {
           elTurnos.innerHTML = '<p class="text-muted mb-0">No hay turnos en espera.</p>';
           return;
         }
 
-        const cola = new Cola(turnos.length);
-        turnos.forEach(t => cola.encolar(t));
+        const cola = new Cola(turnosData.length);
+        turnosData.forEach(t => cola.encolar(t));
 
         elTurnos.innerHTML = `
           <div class="d-flex gap-2 mb-3">
@@ -168,8 +177,7 @@
 
         document.getElementById('btn-atender-next')?.addEventListener('click', async () => {
           try {
-            const primero = turnos[0];
-            await atenderSiguienteTurno(primero.servicio || 'general');
+            await atenderSiguienteTurno(turnosData[0].servicio || 'general');
             await cargarDashboard();
           } catch (e) { alert(e.message); }
         });
@@ -188,9 +196,28 @@
 
       } catch (err) {
         elTurnos.innerHTML = `<div class="alert alert-danger small">${err.message}</div>`;
-        console.warn('Error cargando dashboard empleado:', err);
       }
     }
+
+    // ── Botón PDF ──────────────────────────────────────────────────────────
+    document.getElementById('btn-pdf').addEventListener('click', async () => {
+      const btn = document.getElementById('btn-pdf');
+      btn.disabled = true; btn.textContent = '⏳ Generando...';
+      try {
+        // Cargar todos los turnos (no solo en espera) para el reporte
+        const [turnosEsp, turnosAten, turnosFin] = await Promise.all([
+          obtenerTurnosPorEstado('esperando'),
+          obtenerTurnosPorEstado('atendiendo'),
+          obtenerTurnosPorEstado('finalizado'),
+        ]);
+        await pdfEmpleado({
+          usuario,
+          tramites: tramitesData,
+          turnos:   [...(turnosEsp||[]), ...(turnosAten||[]), ...(turnosFin||[])],
+        });
+      } catch (e) { alert('Error generando PDF: ' + e.message); }
+      finally { btn.disabled = false; btn.textContent = '📄 Descargar reporte PDF'; }
+    });
 
     document.addEventListener('DOMContentLoaded', cargarDashboard);
   </script>

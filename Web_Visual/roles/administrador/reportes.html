@@ -19,7 +19,10 @@
             <h1 class="fw-800 mb-1">📊 Reportes del Sistema</h1>
             <p class="text-muted mb-0">Métricas y estadísticas del SmartCampus UTA.</p>
           </div>
-          <a href="dashboard.html" class="btn btn-outline-secondary btn-sm">← Volver</a>
+          <div class="d-flex gap-2 align-items-center">
+            <button class="btn btn-danger btn-sm" id="btn-pdf">📄 Descargar PDF</button>
+            <a href="dashboard.html" class="btn btn-outline-secondary btn-sm">← Volver</a>
+          </div>
         </div>
       </header>
 
@@ -160,6 +163,7 @@
       obtenerTurnosPorEstado, obtenerNodosCampus, obtenerHistorialAcciones
     } from '../../../src/Persistence/supabaseClient.js';
     import { Pila } from '../../../src/Domain/DataStructures/Pila.js';
+    import { pdfAdmin } from '../../assets/js/generarPDF.js';
 
     const usuario = requireSession();
     if (!usuario || usuario.rol !== 'admin') { window.location.href = '../../../index.html'; }
@@ -274,6 +278,30 @@
       const a    = document.createElement('a');
       a.href = url; a.download = 'bitacora_smartcampus.csv'; a.click();
       URL.revokeObjectURL(url);
+    });
+
+    // Descargar PDF
+    document.getElementById('btn-pdf').addEventListener('click', async () => {
+      const btn = document.getElementById('btn-pdf');
+      btn.disabled = true; btn.textContent = '⏳ Generando...';
+      try {
+        const [usuarios, tramites, turnosEsp, turnosAten, turnosFin, nodos] = await Promise.all([
+          obtenerTodosUsuarios(), obtenerTodosTramites(),
+          obtenerTurnosPorEstado('esperando'),
+          obtenerTurnosPorEstado('atendiendo'),
+          obtenerTurnosPorEstado('finalizado'),
+          obtenerNodosCampus(),
+        ]);
+        await pdfAdmin({
+          usuario,
+          usuarios,
+          tramites,
+          turnos: [...turnosEsp, ...turnosAten, ...turnosFin],
+          nodos,
+          acciones: accionesData,
+        });
+      } catch (e) { alert('Error generando PDF: ' + e.message); }
+      finally { btn.disabled = false; btn.textContent = '📄 Descargar PDF'; }
     });
 
     document.addEventListener('DOMContentLoaded', cargar);
