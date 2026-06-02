@@ -24,12 +24,43 @@
   </header>
 
   <section class="content-panel p-4 mt-3">
-    <div class="d-flex justify-content-between mb-3">
-      <div>
-        <button id="btn-bfs" class="btn btn-outline-secondary btn-sm">BFS</button>
-        <button id="btn-dfs" class="btn btn-outline-secondary btn-sm">DFS</button>
+    <div class="row mb-3">
+      <div class="col-md-6">
+        <h5>Crear / Editar dependencia</h5>
+        <form id="form-dep" class="row g-2 align-items-end">
+          <input type="hidden" id="dep-id">
+          <div class="col-7">
+            <label class="form-label">Nombre</label>
+            <input id="dep-nombre" class="form-control" required>
+          </div>
+          <div class="col-5">
+            <label class="form-label">Tipo</label>
+            <select id="dep-tipo" class="form-select">
+              <option value="facultad">Facultad</option>
+              <option value="departamento">Departamento</option>
+              <option value="unidad">Unidad</option>
+            </select>
+          </div>
+          <div class="col-8">
+            <label class="form-label">Padre (opcional)</label>
+            <select id="dep-padre" class="form-select">
+              <option value="">-- Sin padre (raíz) --</option>
+            </select>
+          </div>
+          <div class="col-4 d-flex gap-2">
+            <button class="btn btn-primary w-100" type="submit" id="btn-guardar">Guardar</button>
+            <button class="btn btn-outline-secondary w-100" type="button" id="btn-cancel">Cancelar</button>
+          </div>
+        </form>
+      </div>
+      <div class="col-md-6 text-end">
+        <div class="d-inline-block">
+          <button id="btn-bfs" class="btn btn-outline-secondary btn-sm">BFS</button>
+          <button id="btn-dfs" class="btn btn-outline-secondary btn-sm">DFS</button>
+        </div>
       </div>
     </div>
+
     <div id="tree-container">
       <div class="spinner-block text-center"><div class="spinner-border text-primary" role="status"></div></div>
     </div>
@@ -53,16 +84,65 @@
   const treeEl = document.getElementById('tree-container');
   let arbol = new Arbol();
 
+  const form = document.getElementById('form-dep');
+  const inpId = document.getElementById('dep-id');
+  const inpNombre = document.getElementById('dep-nombre');
+  const inpTipo = document.getElementById('dep-tipo');
+  const selPadre = document.getElementById('dep-padre');
+  const btnCancel = document.getElementById('btn-cancel');
+
+  function llenarPadreOptions(list) {
+    selPadre.innerHTML = '<option value="">-- Sin padre (raíz) --</option>' +
+      list.map(d => `<option value="${d.id}">${d.nombre}</option>`).join('');
+  }
+
   async function cargar() {
     treeEl.innerHTML = '<div class="spinner-block text-center"><div class="spinner-border text-primary" role="status"></div></div>';
     try {
       const deps = await obtenerDependenciasInstitucionales();
-      if (!deps.length) { treeEl.innerHTML = '<p class="text-muted">No hay dependencias registradas.</p>'; return; }
+      if (!deps.length) { treeEl.innerHTML = '<p class="text-muted">No hay dependencias registradas.</p>'; llenarPadreOptions([]); return; }
       arbol = new Arbol();
       arbol.construirDesdeArray(deps, 'id', 'parent_id');
       treeEl.innerHTML = `<ul class="tree-root">${arbol.renderHTML()}</ul>`;
+      llenarPadreOptions(deps);
     } catch (e) { treeEl.innerHTML = `<div class="alert alert-danger">${e.message}</div>`; }
   }
+
+  // Click en nodo para editar
+  treeEl.addEventListener('click', (ev) => {
+    const lbl = ev.target.closest('.tree-label');
+    if (!lbl) return;
+    const id = lbl.dataset.id;
+    const tipo = lbl.dataset.tipo || 'unidad';
+    // Buscar dato en arbol
+    const nodo = arbol.buscar(d => String(d.id) === String(id));
+    if (!nodo) return;
+    const dato = nodo.dato;
+    inpId.value = dato.id || '';
+    inpNombre.value = dato.nombre || '';
+    inpTipo.value = dato.tipo || tipo;
+    selPadre.value = dato.parent_id || '';
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  });
+
+  form.addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    const id = inpId.value.trim();
+    const nombre = inpNombre.value.trim();
+    const tipo = inpTipo.value;
+    const parent = selPadre.value || null;
+    try {
+      if (id) {
+        await actualizarDependencia(id, { nombre, tipo, parent_id: parent });
+      } else {
+        await crearDependencia(nombre, tipo, parent);
+      }
+      inpId.value = ''; inpNombre.value = '';
+      await cargar();
+    } catch (err) { alert(err.message); }
+  });
+
+  btnCancel.addEventListener('click', () => { inpId.value = ''; inpNombre.value = ''; selPadre.value = ''; });
 
   document.getElementById('btn-bfs').addEventListener('click', () => {
     const rec = arbol.bfs().map(d => d.nombre || d.label || d.id).join(' → ');
@@ -71,6 +151,16 @@
   document.getElementById('btn-dfs').addEventListener('click', () => {
     const rec = arbol.dfs().map(d => d.nombre || d.label || d.id).join(' → ');
     const el = document.getElementById('recorrido'); el.textContent = `DFS preorden: ${rec}`; el.hidden = false;
+  });
+
+  // Delegación para eliminar por doble clic largo (Ctrl+click) o contexto futuro
+  treeEl.addEventListener('dblclick', async (ev) => {
+    const lbl = ev.target.closest('.tree-label');
+    if (!lbl) return;
+    const id = lbl.dataset.id;
+    if (!confirm('Eliminar esta dependencia y sus subdependencias?')) return;
+    try { await eliminarDependencia(id); await cargar(); }
+    catch (err) { alert(err.message); }
   });
 
   await cargar();
