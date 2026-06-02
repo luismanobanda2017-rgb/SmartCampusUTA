@@ -271,8 +271,8 @@ export async function pdfEstudiante({ usuario, tramites, turnos }) {
   ]);
   y += 4;
 
-  // Tabla trámites
-  y = seccion(doc, y, 'Mis trámites');
+  // Tabla trámites estudiante
+  y = seccion(doc, y, 'Mis tramites');
   if (tramites.length) {
     y = tabla(doc, y,
       ['Tipo', 'Descripción', 'Estado', 'Fecha'],
@@ -315,7 +315,7 @@ export async function pdfEmpleado({ usuario, tramites, turnos }) {
   const jsPDF = await cargarJsPDF();
   const doc   = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
 
-  let y = encabezado(doc, '👨‍💼 Reporte de Gestión', 'Trámites procesados y turnos atendidos', usuario);
+  let y = encabezado(doc, 'Reporte de Gestion', 'Tramites procesados y turnos atendidos', usuario);
 
   // KPIs
   y = seccion(doc, y, 'Resumen operativo');
@@ -328,8 +328,8 @@ export async function pdfEmpleado({ usuario, tramites, turnos }) {
   ]);
   y += 4;
 
-  // Tabla trámites
-  y = seccion(doc, y, 'Trámites pendientes y procesados');
+  // Tabla trámites empleado
+  y = seccion(doc, y, 'Tramites pendientes y procesados');
   if (tramites.length) {
     y = tabla(doc, y,
       ['Tipo', 'Estado', 'Solicitante', 'Fecha'],
@@ -346,7 +346,7 @@ export async function pdfEmpleado({ usuario, tramites, turnos }) {
   }
   y += 2;
 
-  // Tabla turnos
+  // Tabla turnos empleado
   y = seccion(doc, y, 'Cola de turnos');
   if (turnos.length) {
     y = tabla(doc, y,
