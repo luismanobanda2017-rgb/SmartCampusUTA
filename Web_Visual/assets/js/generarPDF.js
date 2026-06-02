@@ -37,7 +37,7 @@ function encabezado(doc, titulo, subtitulo, usuario) {
 
   doc.setFontSize(8);
   doc.setFont('helvetica', 'normal');
-  doc.text('Universidad Técnica de Ambato — FISEI', 14, 15);
+  doc.text('Universidad Tecnica de Ambato - FISEI', 14, 15);
 
   // Fecha
   doc.text(fechaHoy(), 196, 9, { align: 'right' });
@@ -183,7 +183,7 @@ export async function pdfAdmin({ usuario, usuarios, tramites, turnos, nodos, acc
   const jsPDF = await cargarJsPDF();
   const doc   = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
 
-  let y = encabezado(doc, '📊 Reporte del Sistema', 'Resumen completo de métricas y actividad', usuario);
+  let y = encabezado(doc, 'Reporte del Sistema', 'Resumen completo de metricas y actividad', usuario);
 
   // KPIs
   y = seccion(doc, y, 'Indicadores clave');
@@ -197,8 +197,7 @@ export async function pdfAdmin({ usuario, usuarios, tramites, turnos, nodos, acc
   y += 4;
 
   // Tabla usuarios
-  y = seccion(doc, y, 'Usuarios registrados');
-  y = tabla(doc, y,
+  y = seccion(doc, y, 'Usuarios registrados');  y = tabla(doc, y,
     ['Nombre', 'Email', 'Rol', 'Registrado'],
     usuarios.map(u => [u.nombre, u.email, u.rol, new Date(u.created_at).toLocaleDateString('es-EC')]),
     [52, 62, 28, 40]
@@ -207,7 +206,7 @@ export async function pdfAdmin({ usuario, usuarios, tramites, turnos, nodos, acc
 
   // Tabla trámites
   if (tramites.length) {
-    y = seccion(doc, y, 'Trámites del sistema');
+    y = seccion(doc, y, 'Tramites del sistema');
     y = tabla(doc, y,
       ['Tipo', 'Descripción', 'Estado', 'Usuario', 'Fecha'],
       tramites.slice(0, 40).map(t => [
@@ -237,7 +236,7 @@ export async function pdfAdmin({ usuario, usuarios, tramites, turnos, nodos, acc
 
   // Bitácora
   if (acciones.length) {
-    y = seccion(doc, y, 'Bitácora de acciones recientes');
+    y = seccion(doc, y, 'Bitacora de acciones recientes');
     y = tabla(doc, y,
       ['Acción', 'Descripción', 'Usuario', 'Fecha'],
       acciones.slice(0, 25).map(a => [
@@ -260,7 +259,7 @@ export async function pdfEstudiante({ usuario, tramites, turnos }) {
   const jsPDF = await cargarJsPDF();
   const doc   = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
 
-  let y = encabezado(doc, '📋 Mi Reporte Personal', 'Historial de trámites y turnos', usuario);
+  let y = encabezado(doc, 'Mi Reporte Personal', 'Historial de tramites y turnos', usuario);
 
   // KPIs
   y = seccion(doc, y, 'Resumen de actividad');
