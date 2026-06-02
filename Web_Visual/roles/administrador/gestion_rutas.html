@@ -6,15 +6,11 @@
   <title>Rutas - SmartCampus UTA</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <link rel="stylesheet" href="../../assets/css/style.css">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <style>
-    #campus-canvas {
-      width: 100%;
-      height: 420px;
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      background: #f8fbff;
-      display: block;
-    }
+    #map { height: 460px; border-radius: 8px; border: 1px solid var(--line); z-index: 0; }
+    .leaflet-legend { background: white; padding: 10px 14px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,.15); font-size: .82rem; line-height: 1.8; }
+    .legend-dot { display: inline-block; width: 12px; height: 12px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
   </style>
 </head>
 <body>
@@ -34,11 +30,7 @@
       </header>
 
       <div class="row g-4">
-
-        <!-- Panel izquierdo: formularios -->
         <div class="col-lg-4">
-
-          <!-- Agregar nodo -->
           <div class="content-panel mb-3">
             <h2 class="h5 mb-3">📍 Agregar punto del campus</h2>
             <div id="nodo-msg" hidden class="alert mb-2"></div>
@@ -71,7 +63,6 @@
             </form>
           </div>
 
-          <!-- Conectar nodos -->
           <div class="content-panel mb-3">
             <h2 class="h5 mb-3">🔗 Conectar puntos</h2>
             <div id="ruta-msg" hidden class="alert mb-2"></div>
@@ -92,7 +83,6 @@
             </form>
           </div>
 
-          <!-- Dijkstra -->
           <div class="content-panel">
             <h2 class="h5 mb-3">🧭 Ruta óptima (Dijkstra)</h2>
             <div class="mb-2">
@@ -106,27 +96,25 @@
             <button class="btn btn-warning btn-sm w-100 mb-2" id="btn-dijkstra">Calcular ruta</button>
             <div id="dij-resultado" hidden class="mock-note small"></div>
           </div>
-
         </div>
 
-        <!-- Panel derecho: canvas -->
         <div class="col-lg-8">
           <div class="content-panel p-3">
-            <div class="d-flex justify-content-between align-items-center mb-2">
-              <h2 class="h6 mb-0 text-muted">Vista del grafo</h2>
-              <div class="d-flex gap-2 align-items-center small text-muted">
-                <span>⬤ <span style="color:#0b3b5f">Nodo</span></span>
-                <span>⬤ <span style="color:#e87a2a">Ruta activa</span></span>
-              </div>
-            </div>
-            <canvas id="campus-canvas"></canvas>
-            <div class="mt-2">
-              <div id="nodos-lista" class="d-flex flex-wrap gap-2"></div>
-            </div>
+            <div id="map"></div>
           </div>
         </div>
-
       </div>
+
+      <div class="content-panel mt-4">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <h2 class="h5 mb-0">🔗 Conexiones registradas</h2>
+          <button class="btn btn-outline-secondary btn-sm" id="btn-refrescar-rutas">↻ Refrescar</button>
+        </div>
+        <div id="tabla-rutas">
+          <div class="spinner-block text-center"><div class="spinner-border text-primary" role="status"></div></div>
+        </div>
+      </div>
+
     </main>
 
     <footer class="footer text-center mt-4">
@@ -135,149 +123,196 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script type="module" src="../../assets/js/auth.js"></script>
 
   <script type="module">
     import { requireSession } from '../../assets/js/auth.js';
-    import { obtenerNodosCampus, obtenerRutasCampus, crearNodo, crearRuta } from '../../../src/Persistence/supabaseClient.js';
-    import { Grafo } from '../../../src/Domain/DataStructures/Grafo.js';
+    import { obtenerNodosCampus, obtenerRutasCampus, crearNodo, crearRuta, eliminarRuta }
+      from '../../../src/Persistence/supabaseClient.js';
 
     const usuario = requireSession();
     if (!usuario || usuario.rol !== 'admin') { window.location.href = '../../../index.html'; }
 
-    const grafo        = new Grafo();
-    let   nodosRaw     = [];
-    let   rutaResaltada = [];
-    const canvas       = document.getElementById('campus-canvas');
-    const ctx          = canvas.getContext('2d');
+    /* ── Nodos hardcodeados del Campus Huachi UTA ── */
+    const NODOS_CAMPUS = [
+      { id:'n01', nombre:'Universidad Técnica de Ambato',             cat:'admin',    lat:-1.24295, lng:-78.61732 },
+      { id:'n02', nombre:'Rectorado',                                 cat:'admin',    lat:-1.24255, lng:-78.61748 },
+      { id:'n03', nombre:'Secretaría General',                        cat:'admin',    lat:-1.24278, lng:-78.61798 },
+      { id:'n04', nombre:'Bienestar Universitario',                   cat:'admin',    lat:-1.24348, lng:-78.61712 },
+      { id:'n05', nombre:'CADME - Evaluación de Conformidad',         cat:'admin',    lat:-1.24218, lng:-78.61668 },
+      { id:'n06', nombre:'Biblioteca General',                        cat:'admin',    lat:-1.24268, lng:-78.61718 },
+      { id:'n07', nombre:'Facultad de Ingeniería en Sistemas',        cat:'facultad', lat:-1.24312, lng:-78.61658 },
+      { id:'n08', nombre:'Facultad de Ciencias Administrativas',      cat:'facultad', lat:-1.24198, lng:-78.61728 },
+      { id:'n09', nombre:'Facultad de Contabilidad y Auditoría',      cat:'facultad', lat:-1.24158, lng:-78.61775 },
+      { id:'n10', nombre:'Facultad de Ciencias Humanas y de la Educación', cat:'facultad', lat:-1.24112, lng:-78.61828 },
+      { id:'n11', nombre:'Facultad de Diseño, Arquitectura y Artes',  cat:'facultad', lat:-1.24072, lng:-78.61758 },
+      { id:'n12', nombre:'Facultad de Ingeniería Civil y Mecánica',   cat:'facultad', lat:-1.24355, lng:-78.61635 },
+      { id:'n13', nombre:'Facultad de Ciencia e Ingeniería en Alimentos', cat:'facultad', lat:-1.24418, lng:-78.61658 },
+      { id:'n14', nombre:'Facultad de Jurisprudencia y Ciencias Sociales', cat:'facultad', lat:-1.24168, lng:-78.61702 },
+      { id:'n15', nombre:'Centro de Idiomas',                         cat:'facultad', lat:-1.24148, lng:-78.61645 },
+      { id:'n16', nombre:'Edificio de Ciencias Básicas',              cat:'facultad', lat:-1.24278, lng:-78.61672 },
+      { id:'n17', nombre:'Carrera de Mercadotecnia',                  cat:'facultad', lat:-1.24232, lng:-78.61692 },
+      { id:'n18', nombre:'IEEE DAY UTA',                              cat:'facultad', lat:-1.24245, lng:-78.61658 },
+      { id:'n19', nombre:'Coliseo Universitario',                     cat:'deporte',  lat:-1.24415, lng:-78.61728 },
+      { id:'n20', nombre:'Estadio Universitario',                     cat:'deporte',  lat:-1.24448, lng:-78.61792 },
+      { id:'n21', nombre:'Complejo Acuático',                         cat:'deporte',  lat:-1.24462, lng:-78.61748 },
+      { id:'n22', nombre:'Patio de Comidas',                          cat:'servicio', lat:-1.24315, lng:-78.61752 },
+      { id:'n23', nombre:'Parqueadero Norte',                         cat:'servicio', lat:-1.24095, lng:-78.61705 },
+      { id:'n24', nombre:'Parqueadero Sur',                           cat:'servicio', lat:-1.24388, lng:-78.61668 },
+      { id:'n25', nombre:'Entrada Principal',                         cat:'servicio', lat:-1.24322, lng:-78.61852 },
+    ];
 
-    // Colores por tipo de nodo
-    const tipoColor = {
-      edificio:    '#0b3b5f',
-      entrada:     '#198754',
-      parqueadero: '#b7791f',
-      area_verde:  '#2d6a4f',
-      cafeteria:   '#c93636',
+    const CONEXIONES_CAMPUS = [
+      ['n25','n03',120],['n03','n02',80],['n02','n06',90],
+      ['n06','n07',100],['n06','n08',110],['n06','n22',60],
+      ['n08','n09',70],['n09','n10',80],['n10','n11',90],
+      ['n07','n12',130],['n12','n13',140],['n06','n14',95],
+      ['n14','n15',85],['n15','n16',70],['n22','n19',100],
+      ['n19','n20',150],['n20','n21',90],['n06','n04',110],
+      ['n04','n05',70],['n23','n02',180],['n24','n12',160],
+      ['n06','n17',75],['n06','n18',65],['n01','n06',55],['n01','n02',60],
+    ];
+
+    const CAT = {
+      admin:    { bg:'#1a3a5c', emoji:'🏛️', label:'Administración' },
+      facultad: { bg:'#c0392b', emoji:'🎓', label:'Facultad'       },
+      deporte:  { bg:'#1e8449', emoji:'⚽', label:'Deportes'       },
+      servicio: { bg:'#d35400', emoji:'🍽️', label:'Servicio'       },
     };
+    const EMOJI_ESP = { n23:'🅿️', n24:'🅿️', n25:'🚪' };
+    const getEmoji = n => EMOJI_ESP[n.id] || CAT[n.cat].emoji;
 
-    function fillSelects(nodos, ...selects) {
-      selects.forEach(sel => {
-        const v = sel.value;
+    /* ── Grafo local para Dijkstra ── */
+    const adj = new Map();
+    NODOS_CAMPUS.forEach(n => adj.set(n.id, []));
+    CONEXIONES_CAMPUS.forEach(([a, b, d]) => {
+      adj.get(a)?.push({ dest: b, dist: d });
+      adj.get(b)?.push({ dest: a, dist: d });
+    });
+
+    function dijkstraLocal(origen, destino) {
+      const dist = new Map(NODOS_CAMPUS.map(n => [n.id, Infinity]));
+      const prev = new Map(); const vis = new Set();
+      dist.set(origen, 0);
+      while (true) {
+        let u = null;
+        for (const [id, d] of dist) if (!vis.has(id) && (u === null || d < dist.get(u))) u = id;
+        if (u === null || dist.get(u) === Infinity || u === destino) break;
+        vis.add(u);
+        for (const { dest, dist: w } of (adj.get(u) || [])) {
+          const alt = dist.get(u) + w;
+          if (alt < dist.get(dest)) { dist.set(dest, alt); prev.set(dest, u); }
+        }
+      }
+      const ruta = []; let cur = destino;
+      while (cur) { ruta.unshift(cur); cur = prev.get(cur); }
+      return { distancia: dist.get(destino), ruta: ruta[0] === origen ? ruta : [] };
+    }
+
+    /* ── Mapa Leaflet ── */
+    const map = L.map('map', { center: [-1.24259, -78.61750], zoom: 17, minZoom: 15, maxZoom: 19 });
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>', maxZoom: 19,
+    }).addTo(map);
+
+    const leg = L.control({ position: 'bottomright' });
+    leg.onAdd = () => {
+      const d = L.DomUtil.create('div', 'leaflet-legend');
+      d.innerHTML = `<strong style="font-size:.85rem">Leyenda</strong><br>
+        <span class="legend-dot" style="background:#1a3a5c"></span>Administración<br>
+        <span class="legend-dot" style="background:#c0392b"></span>Facultades<br>
+        <span class="legend-dot" style="background:#1e8449"></span>Deportes<br>
+        <span class="legend-dot" style="background:#d35400"></span>Servicios`;
+      return d;
+    };
+    leg.addTo(map);
+
+    /* ── Marcadores hardcodeados ── */
+    const markerMap = new Map();
+    let rutaLayer = null;
+
+    NODOS_CAMPUS.forEach(n => {
+      const emoji = getEmoji(n);
+      const bg    = CAT[n.cat].bg;
+      const icon  = L.divIcon({
+        html: `<div style="background:${bg};color:#fff;border-radius:50%;width:36px;height:36px;
+               display:flex;align-items:center;justify-content:center;font-size:17px;
+               border:3px solid #fff;box-shadow:0 3px 10px rgba(0,0,0,.4)">${emoji}</div>`,
+        className: '', iconSize: [36, 36], iconAnchor: [18, 18],
+      });
+      const marker = L.marker([n.lat, n.lng], { icon })
+        .addTo(map)
+        .bindPopup(`<strong style="font-size:.9rem">${n.nombre}</strong><br>
+                    <small style="color:${bg};font-weight:600">${CAT[n.cat].label}</small>`);
+      markerMap.set(n.id, { nodo: n, marker });
+    });
+
+    /* Líneas de conexión hardcodeadas */
+    CONEXIONES_CAMPUS.forEach(([a, b]) => {
+      const na = markerMap.get(a)?.nodo, nb = markerMap.get(b)?.nodo;
+      if (!na || !nb) return;
+      L.polyline([[na.lat, na.lng], [nb.lat, nb.lng]],
+        { color: '#4a90d9', weight: 2.5, opacity: 0.6 }).addTo(map);
+    });
+
+    /* ── Llenar selectores con NODOS_CAMPUS ── */
+    function fillSelects() {
+      ['ruta-origen', 'ruta-destino', 'dij-origen', 'dij-destino'].forEach(id => {
+        const sel = document.getElementById(id);
         sel.innerHTML = '';
-        nodos.forEach(n => {
-          const o = document.createElement('option');
-          o.value = n.id; o.textContent = n.nombre;
-          sel.appendChild(o);
-        });
-        if (v) sel.value = v;
+        NODOS_CAMPUS.forEach(n => { sel.innerHTML += `<option value="${n.id}">${n.nombre}</option>`; });
       });
     }
+    fillSelects();
 
-    function escalar(nodos) {
-      if (!nodos.length) return nodos;
-      const pad  = 50;
-      const rect = canvas.getBoundingClientRect();
-      const W    = (rect.width  || 600) - pad * 2;
-      const H    = (rect.height || 420) - pad * 2;
-      const xs   = nodos.map(n => n.pos_x);
-      const ys   = nodos.map(n => n.pos_y);
-      const minX = Math.min(...xs), maxX = Math.max(...xs);
-      const minY = Math.min(...ys), maxY = Math.max(...ys);
-      return nodos.map(n => ({
-        ...n,
-        cx: pad + ((n.pos_x - minX) / (maxX - minX || 1)) * W,
-        cy: pad + ((n.pos_y - minY) / (maxY - minY || 1)) * H,
-      }));
+    /* ── Tabla de rutas desde Supabase ── */
+    let nodosDBCache = [];
+
+    function renderTablaRutas(rutas) {
+      const el = document.getElementById('tabla-rutas');
+      if (!rutas.length) { el.innerHTML = '<p class="text-muted small mb-0">No hay conexiones en Supabase.</p>'; return; }
+      const nNombre = id => {
+        const dbN = nodosDBCache.find(n => n.id == id);
+        if (dbN) return dbN.nombre;
+        const local = NODOS_CAMPUS.find(n => n.id == id);
+        return local ? local.nombre : id;
+      };
+      el.innerHTML = `
+        <div class="table-responsive">
+          <table class="table table-sm table-hover align-middle mb-0">
+            <thead class="table-light">
+              <tr>
+                <th class="small text-muted">Origen</th><th class="small text-muted">Destino</th>
+                <th class="small text-muted">Distancia (m)</th><th class="small text-muted">Bidireccional</th>
+                <th class="small text-muted">Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rutas.map(r => `
+                <tr>
+                  <td class="small fw-semibold">${nNombre(r.nodo_origen_id)}</td>
+                  <td class="small">${nNombre(r.nodo_destino_id)}</td>
+                  <td class="small">${r.distancia ?? '—'}</td>
+                  <td class="small">${r.bidireccional ? '✅ Sí' : '→ No'}</td>
+                  <td><button class="btn btn-outline-danger btn-sm" data-del="${r.id}">✕ Eliminar</button></td>
+                </tr>`).join('')}
+            </tbody>
+          </table>
+        </div>`;
     }
 
-    function dibujar(rutaIds = []) {
-      const dpr  = window.devicePixelRatio || 1;
-      const rect = canvas.getBoundingClientRect();
-      const W    = rect.width  || 600;
-      const H    = rect.height || 420;
-      canvas.width  = W * dpr;
-      canvas.height = H * dpr;
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      ctx.clearRect(0, 0, W, H);
-
-      const nodos = escalar(nodosRaw);
-      const mapa  = new Map(nodos.map(n => [n.id, n]));
-
-      // Aristas normales
-      const dibujadas = new Set();
-      ctx.strokeStyle = '#d9e2ec';
-      ctx.lineWidth   = 2;
-      for (const { origen, destino } of (grafo.obtenerAristas?.() || [])) {
-        const k = [origen, destino].sort().join('-');
-        if (dibujadas.has(k)) continue;
-        dibujadas.add(k);
-        const a = mapa.get(origen), b = mapa.get(destino);
-        if (!a || !b) continue;
-        ctx.beginPath(); ctx.moveTo(a.cx, a.cy); ctx.lineTo(b.cx, b.cy); ctx.stroke();
-        const dist = grafo.adyacencias?.get(origen)?.find(e => e.destino === destino)?.distancia;
-        if (dist) {
-          ctx.fillStyle = '#667085';
-          ctx.font      = '11px Inter';
-          ctx.fillText(dist + 'm', (a.cx + b.cx) / 2 + 4, (a.cy + b.cy) / 2 - 4);
-        }
-      }
-
-      // Ruta resaltada (naranja)
-      if (rutaIds.length > 1) {
-        ctx.strokeStyle = '#e87a2a';
-        ctx.lineWidth   = 5;
-        ctx.beginPath();
-        rutaIds.forEach((id, i) => {
-          const n = mapa.get(id);
-          if (!n) return;
-          i === 0 ? ctx.moveTo(n.cx, n.cy) : ctx.lineTo(n.cx, n.cy);
-        });
-        ctx.stroke();
-      }
-
-      // Nodos
-      nodos.forEach(n => {
-        const enRuta = rutaIds.includes(n.id);
-        const color  = enRuta ? '#e87a2a' : (tipoColor[n.tipo] || '#0b3b5f');
-        ctx.fillStyle = color;
-        ctx.beginPath(); ctx.arc(n.cx, n.cy, 13, 0, Math.PI * 2); ctx.fill();
-        if (enRuta) {
-          ctx.strokeStyle = '#fff';
-          ctx.lineWidth   = 2.5;
-          ctx.stroke();
-        }
-        ctx.fillStyle = '#17212b';
-        ctx.font      = '600 11px Inter';
-        ctx.fillText(n.nombre, n.cx + 17, n.cy + 4);
-      });
-
-      // Tags de nodos
-      const lista = document.getElementById('nodos-lista');
-      lista.innerHTML = nodos.map(n => {
-        const color = tipoColor[n.tipo] || '#0b3b5f';
-        return `<span class="badge" style="background:${color};font-size:.75rem">${n.nombre}</span>`;
-      }).join('');
-    }
-
-    async function recargar() {
+    async function recargarTabla() {
       try {
         const [nodos, rutas] = await Promise.all([obtenerNodosCampus(), obtenerRutasCampus()]);
-        nodosRaw = nodos || [];
-        grafo.nodos?.clear?.();
-        grafo.adyacencias?.clear?.();
-        grafo.construirDesdeSupabase?.(nodos, rutas);
-        fillSelects(nodosRaw,
-          document.getElementById('ruta-origen'),
-          document.getElementById('ruta-destino'),
-          document.getElementById('dij-origen'),
-          document.getElementById('dij-destino'));
-        dibujar(rutaResaltada);
+        nodosDBCache = nodos || [];
+        renderTablaRutas(rutas || []);
       } catch (e) {
-        console.warn('Error recargando grafo:', e);
+        document.getElementById('tabla-rutas').innerHTML = `<div class="alert alert-warning small">Sin conexión a Supabase: ${e.message}</div>`;
       }
     }
 
-    // Agregar nodo
+    /* ── Formulario nodo ── */
     document.getElementById('form-nodo').addEventListener('submit', async (e) => {
       e.preventDefault();
       const msg = document.getElementById('nodo-msg');
@@ -289,19 +324,12 @@
           parseFloat(document.getElementById('nodo-x').value),
           parseFloat(document.getElementById('nodo-y').value)
         );
-        msg.className = 'alert alert-success';
-        msg.textContent = 'Nodo agregado correctamente.';
-        msg.hidden = false;
-        e.target.reset();
-        await recargar();
-      } catch (err) {
-        msg.className = 'alert alert-danger';
-        msg.textContent = err.message;
-        msg.hidden = false;
-      }
+        msg.className = 'alert alert-success'; msg.textContent = 'Nodo guardado en Supabase.'; msg.hidden = false;
+        e.target.reset(); await recargarTabla();
+      } catch (err) { msg.className = 'alert alert-danger'; msg.textContent = err.message; msg.hidden = false; }
     });
 
-    // Conectar nodos
+    /* ── Formulario ruta ── */
     document.getElementById('form-ruta').addEventListener('submit', async (e) => {
       e.preventDefault();
       const msg = document.getElementById('ruta-msg');
@@ -312,39 +340,46 @@
           document.getElementById('ruta-destino').value,
           parseFloat(document.getElementById('ruta-dist').value)
         );
-        msg.className = 'alert alert-success';
-        msg.textContent = 'Conexión creada correctamente.';
-        msg.hidden = false;
-        e.target.reset();
-        await recargar();
-      } catch (err) {
-        msg.className = 'alert alert-danger';
-        msg.textContent = err.message;
-        msg.hidden = false;
-      }
+        msg.className = 'alert alert-success'; msg.textContent = 'Conexión creada.'; msg.hidden = false;
+        e.target.reset(); await recargarTabla();
+      } catch (err) { msg.className = 'alert alert-danger'; msg.textContent = err.message; msg.hidden = false; }
     });
 
-    // Dijkstra
+    /* ── Dijkstra ── */
     document.getElementById('btn-dijkstra').addEventListener('click', () => {
-      const o = document.getElementById('dij-origen').value;
-      const d = document.getElementById('dij-destino').value;
-      if (o === d) { alert('Selecciona puntos diferentes.'); return; }
-      const { distancia, ruta } = grafo.dijkstra(o, d);
-      rutaResaltada = ruta;
-      const el = document.getElementById('dij-resultado');
+      const oId = document.getElementById('dij-origen').value;
+      const dId = document.getElementById('dij-destino').value;
+      const elR = document.getElementById('dij-resultado');
+      if (!oId || !dId) { alert('Selecciona origen y destino.'); return; }
+      if (oId === dId)  { alert('Selecciona puntos diferentes.'); return; }
+
+      const { distancia, ruta } = dijkstraLocal(oId, dId);
+      if (rutaLayer) { map.removeLayer(rutaLayer); rutaLayer = null; }
+      elR.hidden = false;
+
       if (!ruta.length || distancia === Infinity) {
-        el.innerHTML = '<span class="text-danger">⚠ No hay ruta disponible entre estos puntos.</span>';
-      } else {
-        const nombres = ruta.map(id => grafo.nodos?.get?.(id)?.nombre || id).join(' → ');
-        el.innerHTML = `<strong>Ruta:</strong> ${nombres}<br><small>Distancia total: <strong>${distancia.toFixed(0)} m</strong></small>`;
+        elR.innerHTML = '<span class="text-danger">⚠ No hay ruta disponible.</span>'; return;
       }
-      el.hidden = false;
-      dibujar(ruta);
+
+      const nombres = ruta.map(id => markerMap.get(id)?.nodo?.nombre || id).join(' → ');
+      elR.innerHTML = `<strong>Ruta:</strong> ${nombres}<br><small>Distancia: <strong>${distancia.toFixed(0)} m</strong></small>`;
+
+      const coords = ruta.map(id => { const e = markerMap.get(id); return e ? [e.nodo.lat, e.nodo.lng] : null; }).filter(Boolean);
+      rutaLayer = L.polyline(coords, { color: '#e87a2a', weight: 6, opacity: 0.9 }).addTo(map);
+      map.fitBounds(rutaLayer.getBounds(), { padding: [50, 50] });
     });
 
-    window.addEventListener('resize', () => dibujar(rutaResaltada));
+    /* ── Eliminar ruta ── */
+    document.getElementById('tabla-rutas').addEventListener('click', async (ev) => {
+      const btn = ev.target.closest('[data-del]');
+      if (!btn) return;
+      if (!confirm('¿Eliminar esta conexión?')) return;
+      try { await eliminarRuta(btn.dataset.del); await recargarTabla(); }
+      catch (e) { alert(e.message); }
+    });
 
-    document.addEventListener('DOMContentLoaded', recargar);
+    document.getElementById('btn-refrescar-rutas').addEventListener('click', recargarTabla);
+    document.addEventListener('DOMContentLoaded', recargarTabla);
   </script>
 </body>
 </html>
