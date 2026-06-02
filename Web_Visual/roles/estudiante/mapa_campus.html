@@ -119,15 +119,53 @@
     ];
 
     /* Conexiones del grafo (para Dijkstra) */
+    // GRAFO COMPLETO — Campus Huachi UTA
+    // Pesos en metros. Todas las aristas son bidireccionales.
     const CONEXIONES = [
-      ['n25','n03', 120], ['n03','n02', 80],  ['n02','n06', 90],
-      ['n06','n07', 100], ['n06','n08', 110], ['n06','n22', 60],
-      ['n08','n09', 70],  ['n09','n10', 80],  ['n10','n11', 90],
-      ['n07','n12', 130], ['n12','n13', 140], ['n06','n14', 95],
-      ['n14','n15', 85],  ['n15','n16', 70],  ['n22','n19', 100],
-      ['n19','n20', 150], ['n20','n21', 90],  ['n06','n04', 110],
-      ['n04','n05', 70],  ['n23','n02', 180], ['n24','n12', 160],      ['n06','n17', 75],  ['n01','n06', 55],  ['n01','n02', 60],
-      ['n22','n26', 10],  ['n01','n27', 30],
+      // Entrada → zona central
+      ['n25','n06',  80],  // Entrada Principal → Biblioteca General
+      ['n25','n10', 100],  // Entrada Principal → FCHE
+      // Biblioteca General (hub central) → todas las facultades
+      ['n06','n02',  90],  // Biblioteca → Rectorado/FISEI
+      ['n06','n08', 110],  // Biblioteca → FCA
+      ['n06','n14',  95],  // Biblioteca → FJCS
+      ['n06','n22',  60],  // Biblioteca → Patio de Comidas
+      ['n06','n04', 110],  // Biblioteca → Bienestar Universitario
+      ['n06','n17',  75],  // Biblioteca → Mercadotecnia
+      ['n06','n01',  55],  // Biblioteca → UTA (edificio central)
+      // Zona FISEI (n02/n03/n07 comparten coord)
+      ['n02','n07',   5],  // Rectorado ↔ FISEI
+      ['n02','n03',   5],  // Rectorado ↔ Secretaría
+      ['n02','n15',  60],  // Rectorado → Centro de Idiomas
+      ['n02','n16',  55],  // Rectorado → Ciencias Básicas
+      ['n15','n16',  30],  // Centro de Idiomas ↔ Ciencias Básicas
+      // Cadena norte de facultades
+      ['n08','n09',  70],  // FCA → FCAUD
+      ['n09','n10',  80],  // FCAUD → FCHE
+      ['n10','n11',  90],  // FCHE → FDAA
+      // Cadena sur de facultades
+      ['n07','n12', 130],  // FISEI → FICM
+      ['n12','n13', 140],  // FICM → FCIAB
+      ['n12','n24', 100],  // FICM → Parqueadero Sur
+      // FJCS → zona norte
+      ['n14','n08',  85],  // FJCS → FCA
+      // Bienestar Universitario → coliseo
+      ['n04','n19', 120],  // Bienestar → Coliseo
+      // Deportes
+      ['n19','n22', 100],  // Coliseo ↔ Patio de Comidas
+      ['n19','n04',  80],  // Coliseo ↔ Bienestar
+      ['n20','n21',  90],  // Estadio → Complejo Acuático
+      ['n21','n19', 150],  // Complejo Acuático → Coliseo
+      // Parqueadero Norte
+      ['n23','n02', 120],  // Parqueadero Norte → Rectorado/FISEI
+      ['n23','n15',  60],  // Parqueadero Norte → Centro de Idiomas
+      // Ambulancia (mismo punto que Patio de Comidas)
+      ['n22','n26',   5],
+      // Estadio UTA (mismo punto que UTA central)
+      ['n01','n27',   5],
+      // UTA central
+      ['n01','n02', 200],  // UTA → Rectorado
+      ['n01','n04',  80],  // UTA → Bienestar
     ];
 
     /* ── Estilos por categoría ── */
@@ -168,27 +206,57 @@
       adj.get(b)?.push({ dest: a, dist: d }); // bidireccional
     });
 
+    // Verificar nodos aislados (sin conexiones)
+    NODOS.forEach(n => {
+      if ((adj.get(n.id) || []).length === 0) {
+        console.warn(`[MAPA] Nodo aislado sin conexiones: ${n.id} (${n.nombre})`);
+      }
+    });
+
     function dijkstra(origen, destino) {
       const dist  = new Map(NODOS.map(n => [n.id, Infinity]));
       const prev  = new Map();
       const vistos = new Set();
       dist.set(origen, 0);
+
       while (true) {
+        // Nodo no visitado con menor distancia acumulada
         let u = null;
         for (const [id, d] of dist) {
           if (!vistos.has(id) && (u === null || d < dist.get(u))) u = id;
         }
-        if (u === null || dist.get(u) === Infinity || u === destino) break;
+        if (u === null || dist.get(u) === Infinity) break; // sin más alcanzables
+        if (u === destino) break; // destino alcanzado
         vistos.add(u);
+
         for (const { dest, dist: w } of (adj.get(u) || [])) {
           const alt = dist.get(u) + w;
-          if (alt < dist.get(dest)) { dist.set(dest, alt); prev.set(dest, u); }
+          if (alt < dist.get(dest)) {
+            dist.set(dest, alt);
+            prev.set(dest, u);
+          }
         }
       }
+
+      // Reconstruir ruta hacia atrás desde destino
       const ruta = [];
       let cur = destino;
-      while (cur) { ruta.unshift(cur); cur = prev.get(cur); }
-      return { distancia: dist.get(destino), ruta: ruta[0] === origen ? ruta : [] };
+      while (cur !== undefined) {
+        ruta.unshift(cur);
+        cur = prev.get(cur);
+      }
+
+      const rutaValida = ruta.length >= 2 && ruta[0] === origen;
+      return {
+        distancia: rutaValida ? dist.get(destino) : Infinity,
+        ruta:      rutaValida ? ruta : [],
+      };
+    }
+
+    // Obtiene el peso de la arista entre dos nodos
+    function pesoArista(a, b) {
+      const vecinos = adj.get(a) || [];
+      return vecinos.find(v => v.dest === b)?.dist ?? null;
     }
 
     /* ── Marcadores ── */
@@ -220,7 +288,10 @@
     });
 
     /* ── Selectores ── */
-    let rutaLayer = null;
+    let rutaLayer    = null;
+    let tramoLayers  = [];   // polylines de tramos individuales
+    let labelLayers  = [];   // marcadores de etiquetas de distancia
+
     const selO = document.getElementById('dij-origen');
     const selD = document.getElementById('dij-destino');
     selO.innerHTML = '<option value="">Selecciona origen...</option>';
@@ -229,6 +300,12 @@
       selO.innerHTML += `<option value="${n.id}">${n.nombre}</option>`;
       selD.innerHTML += `<option value="${n.id}">${n.nombre}</option>`;
     });
+
+    function limpiarRuta() {
+      if (rutaLayer)    { map.removeLayer(rutaLayer); rutaLayer = null; }
+      tramoLayers.forEach(l => map.removeLayer(l)); tramoLayers = [];
+      labelLayers.forEach(l => map.removeLayer(l)); labelLayers = [];
+    }
 
     /* ── Tarjetas de nodos ── */
     document.getElementById('nodos-lista').innerHTML = NODOS.map(n => `
@@ -263,7 +340,7 @@
       if (oId === dId)  { alert('Selecciona puntos diferentes.'); return; }
 
       const { distancia, ruta } = dijkstra(oId, dId);
-      if (rutaLayer) { map.removeLayer(rutaLayer); rutaLayer = null; }
+      limpiarRuta();
       elR.hidden = false;
 
       if (!ruta.length || distancia === Infinity) {
@@ -271,19 +348,63 @@
         return;
       }
 
+      // Construir descripción de tramos
+      const tramos = [];
+      for (let i = 0; i < ruta.length - 1; i++) {
+        const peso = pesoArista(ruta[i], ruta[i + 1]);
+        tramos.push(`<span class="badge bg-light text-dark border">${peso ?? '?'} m</span>`);
+      }
+
       const nombres = ruta.map(id => markerMap.get(id)?.nodo?.nombre || id).join(' → ');
-      elR.innerHTML = `<strong>Ruta:</strong> ${nombres}<br>
-                       <small>Distancia total: <strong>${distancia.toFixed(0)} m</strong></small>`;
+      elR.innerHTML = `
+        <strong>Ruta:</strong> ${nombres}<br>
+        <small>Distancia total: <strong>${distancia.toFixed(0)} m</strong></small><br>
+        <div class="mt-1 d-flex flex-wrap gap-1 align-items-center">
+          <small class="text-muted">Tramos:</small> ${tramos.join(' <span class="text-muted">→</span> ')}
+        </div>`;
 
-      const coords = ruta.map(id => {
-        const e = markerMap.get(id); return e ? [e.nodo.lat, e.nodo.lng] : null;
-      }).filter(Boolean);
+      // Dibujar tramos individuales con etiqueta de distancia
+      const allCoords = [];
+      for (let i = 0; i < ruta.length - 1; i++) {
+        const na = markerMap.get(ruta[i])?.nodo;
+        const nb = markerMap.get(ruta[i + 1])?.nodo;
+        if (!na || !nb) continue;
 
-      rutaLayer = L.polyline(coords, { color: '#e87a2a', weight: 6, opacity: 0.9 }).addTo(map);
-      map.fitBounds(rutaLayer.getBounds(), { padding: [50, 50] });
+        const peso = pesoArista(ruta[i], ruta[i + 1]);
+        allCoords.push([na.lat, na.lng]);
 
-      // Resaltar marcadores de la ruta
-      ruta.forEach(id => markerMap.get(id)?.marker?.openPopup());
+        // Línea del tramo
+        const tramo = L.polyline([[na.lat, na.lng], [nb.lat, nb.lng]], {
+          color: '#e87a2a', weight: 6, opacity: 0.9,
+        }).addTo(map);
+        tramoLayers.push(tramo);
+
+        // Etiqueta de distancia en el punto medio del tramo
+        if (peso !== null) {
+          const midLat = (na.lat + nb.lat) / 2;
+          const midLng = (na.lng + nb.lng) / 2;
+          const label = L.marker([midLat, midLng], {
+            icon: L.divIcon({
+              html: `<div style="background:white;border:1.5px solid #e87a2a;border-radius:4px;
+                     padding:1px 5px;font-size:11px;font-weight:700;color:#e87a2a;
+                     white-space:nowrap;box-shadow:0 1px 4px rgba(0,0,0,.2)">${peso} m</div>`,
+              className: '', iconAnchor: [20, 10],
+            }),
+          }).addTo(map);
+          labelLayers.push(label);
+        }
+      }
+
+      // Añadir último punto
+      const lastNodo = markerMap.get(ruta[ruta.length - 1])?.nodo;
+      if (lastNodo) allCoords.push([lastNodo.lat, lastNodo.lng]);
+
+      if (allCoords.length > 1) {
+        map.fitBounds(L.latLngBounds(allCoords), { padding: [50, 50] });
+      }
+
+      // Popups en origen y destino
+      markerMap.get(oId)?.marker?.openPopup();
     });
   </script>
 </body>
