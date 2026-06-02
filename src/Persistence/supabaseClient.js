@@ -159,6 +159,34 @@ export async function eliminarDocumento(id) {
     if (error) throw new Error(error.message);
 }
 
+// ─── DEPENDENCIAS INSTITUCIONALES (Árbol) ───────────────────────────────────
+export async function obtenerDependenciasInstitucionales() {
+    try {
+        const { data, error } = await supabase.from('dependencias').select('*').order('id');
+        if (error) throw new Error(error.message);
+        return data || [];
+    } catch (_) {
+        // Si la tabla no existe, devolver array vacío para render seguro
+        return [];
+    }
+}
+
+export async function crearDependencia(nombre, tipo = 'unidad', parent_id = null) {
+    const { data, error } = await supabase.from('dependencias').insert([{ nombre, tipo, parent_id }]).select().single();
+    if (error) throw new Error(error.message);
+    return data;
+}
+
+export async function actualizarDependencia(id, fields) {
+    const { error } = await supabase.from('dependencias').update(fields).eq('id', id);
+    if (error) throw new Error(error.message);
+}
+
+export async function eliminarDependencia(id) {
+    const { error } = await supabase.from('dependencias').delete().eq('id', id);
+    if (error) throw new Error(error.message);
+}
+
 // ─── RUTAS DEL CAMPUS ────────────────────────────────────────────────────────
 export async function obtenerNodosCampus() {
     const { data, error } = await supabase.from('nodos_campus').select('*');

@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gestión de Turnos - Empleado</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="../../assets/css/style.css">
+</head>
+<body>
+<div id="sc-navbar"></div>
+<main class="container py-4">
+  <header class="page-header d-flex justify-content-between align-items-center">
+    <div>
+      <h1>🎫 Gestión de Turnos</h1>
+      <p class="text-muted">Atiende la cola por servicio y administra estados.</p>
+    </div>
+    <a href="dashboard.html" class="btn btn-outline-secondary">← Volver</a>
+  </header>
+
+  <section class="content-panel p-4 mt-3">
+    <div class="mb-3">
+      <label class="form-label">Servicio</label>
+      <select id="servicio" class="form-select w-auto">
+        <option value="administracion">Administración</option>
+        <option value="academico">Académico</option>
+        <option value="titulacion">Titulación</option>
+      </select>
+    </div>
+    <div class="d-flex gap-2 mb-3">
+      <button id="btn-atender" class="btn btn-primary">Atender siguiente</button>
+      <button id="btn-refrescar" class="btn btn-outline-secondary">Refrescar</button>
+    </div>
+
+    <div id="lista-turnos">
+      <div class="spinner-block text-center"><div class="spinner-border text-primary" role="status"></div></div>
+    </div>
+  </section>
+</main>
+
+<footer class="footer text-center mt-4">
+  <div class="container"><p class="mb-0">SmartCampus UTA · 2025</p></div>
+</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script type="module">
+  import { requireSession } from '../../assets/js/auth.js';
+  import { obtenerTurnosPorEstado, atenderSiguienteTurno } from '../../../src/Persistence/supabaseClient.js';
+
+  const usuario = requireSession();
+  if (!usuario || usuario.rol !== 'empleado') { alert('Acceso solo para empleados.'); window.location.href='../../index.html'; }
+
+  const listaEl = document.getElementById('lista-turnos');
+  const servicioSel = document.getElementById('servicio');
+
+  async function cargar() {
+    listaEl.innerHTML = '<div class="spinner-block text-center"><div class="spinner-border text-primary" role="status"></div></div>';
+    try {
+      const esperando = await obtenerTurnosPorEstado('esperando');
+      const filtrados = esperando.filter(t => t.servicio === servicioSel.value);
+      if (!filtrados.length) { listaEl.innerHTML = '<p class="text-muted">Sin turnos en espera para este servicio.</p>'; return; }
+      listaEl.innerHTML = `<ul class="list-group">${filtrados.map(t=>`<li class="list-group-item">${t.usuarios?.nombre||'Anon'} — ${new Date(t.created_at).toLocaleString('es-EC')}</li>`).join('')}</ul>`;
+    } catch (e) { listaEl.innerHTML = `<div class="alert alert-danger">${e.message}</div>`; }
+  }
+
+  document.getElementById('btn-atender').addEventListener('click', async () => {
+    try { await atenderSiguienteTurno(servicioSel.value); await cargar(); }
+    catch (e) { alert(e.message); }
+  });
+  document.getElementById('btn-refrescar').addEventListener('click', cargar);
+
+  await cargar();
+</script>
+</body>
+</html>

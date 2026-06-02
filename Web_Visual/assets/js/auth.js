@@ -7,7 +7,8 @@ import { iniciarSesion, registrarUsuario, obtenerSesion, cerrarSesion, getRaiz }
 
 const ROL_RUTAS = {
     admin:      'roles/administrador/dashboard.html',
-    estudiante: 'roles/estudiante/dashboard.html'
+    estudiante: 'roles/estudiante/dashboard.html',
+    empleado:   'roles/empleado/dashboard.html'
 };
 
 export function requireSession() {
@@ -42,13 +43,18 @@ export function renderNavbar() {
                 <li class="nav-item"><a class="nav-link" href="${raiz}roles/administrador/gestion_tramites.html">Trámites</a></li>
                 <li class="nav-item"><a class="nav-link" href="${raiz}roles/administrador/gestion_rutas.html">Rutas</a></li>
                 <li class="nav-item"><a class="nav-link" href="${raiz}roles/administrador/reportes.html">Reportes</a></li>`;
-        } else {
+        } else if (usuario.rol === 'estudiante') {
             linksPrivados = `
                 <li class="nav-item"><a class="nav-link" href="${raiz}roles/estudiante/dashboard.html">Panel</a></li>
                 <li class="nav-item"><a class="nav-link" href="${raiz}roles/estudiante/solicitar_tramite.html">Trámite</a></li>
                 <li class="nav-item"><a class="nav-link" href="${raiz}roles/estudiante/mis_turnos.html">Turnos</a></li>
                 <li class="nav-item"><a class="nav-link" href="${raiz}roles/estudiante/documentos.html">Documentos</a></li>
                 <li class="nav-item"><a class="nav-link" href="${raiz}roles/estudiante/mapa_campus.html">Mapa</a></li>`;
+        } else if (usuario.rol === 'empleado') {
+            linksPrivados = `
+                <li class="nav-item"><a class="nav-link" href="${raiz}roles/empleado/dashboard.html">Panel</a></li>
+                <li class="nav-item"><a class="nav-link" href="${raiz}roles/empleado/gestion_turnos.html">Turnos</a></li>
+                <li class="nav-item"><a class="nav-link" href="${raiz}roles/empleado/gestion_tramites.html">Trámites</a></li>`;
         }
     }
 

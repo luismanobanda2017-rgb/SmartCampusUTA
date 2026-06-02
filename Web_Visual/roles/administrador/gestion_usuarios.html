@@ -54,9 +54,11 @@
         <td><span class="badge ${u.rol==='admin'?'bg-danger': u.rol==='empleado'?'bg-warning text-dark':'bg-secondary'}">${u.rol}</span></td>
         <td>${new Date(u.created_at).toLocaleDateString('es-EC')}</td>
         <td>
-          <button class="btn btn-outline-primary btn-sm me-1" data-cambio-rol="${u.id}" data-rol-actual="${u.rol}">
-            ${u.rol==='admin'?'→ Estudiante': u.rol==='estudiante'?'→ Empleado':'→ Admin'}
-          </button>
+          <select class="form-select form-select-sm w-auto me-2" data-cambio-rol="${u.id}">
+            <option value="estudiante" ${u.rol==='estudiante'?'selected':''}>Estudiante</option>
+            <option value="empleado" ${u.rol==='empleado'?'selected':''}>Empleado</option>
+            <option value="admin" ${u.rol==='admin'?'selected':''}>Administrador</option>
+          </select>
           <button class="btn btn-outline-danger btn-sm" data-eliminar="${u.id}">✕</button>
         </td>
       </tr>`).join('')}</tbody>
@@ -80,19 +82,21 @@
     render(filtrados);
   });
 
-  el.addEventListener('click', async (e) => {
-    const btnRol = e.target.closest('[data-cambio-rol]');
-    const btnDel = e.target.closest('[data-eliminar]');
-    if (btnRol) {
-      const rolesDisponibles = ['estudiante', 'empleado', 'admin'];
-      const rolActual = btnRol.dataset.rolActual;
-      const siguiente = rolesDisponibles[(rolesDisponibles.indexOf(rolActual) + 1) % rolesDisponibles.length];
-      const nuevoRol = siguiente;
-      if (confirm(`¿Cambiar rol a "${nuevoRol}"?`)) {
-        await actualizarRolUsuario(btnRol.dataset.cambioRol, nuevoRol);
+  // Manejar cambio explícito de rol desde el select y eliminación
+  el.addEventListener('change', async (e) => {
+    const sel = e.target.closest('[data-cambio-rol]');
+    if (sel) {
+      const nuevoRol = sel.value;
+      if (!confirm(`¿Cambiar rol de este usuario a "${nuevoRol}"?`)) { await cargar(); return; }
+      try {
+        await actualizarRolUsuario(sel.dataset.cambioRol, nuevoRol);
         await cargar();
-      }
+      } catch (err) { alert(err.message); }
     }
+  });
+
+  el.addEventListener('click', async (e) => {
+    const btnDel = e.target.closest('[data-eliminar]');
     if (btnDel) {
       if (confirm('¿Eliminar este usuario? Esta acción no se puede deshacer.')) {
         await eliminarUsuario(btnDel.dataset.eliminar);
