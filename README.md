@@ -6,8 +6,6 @@
 
 ## 📑 Informe Técnico del Proyecto
 
-### 👥 Integrantes / Autores
-
 | Campo              | Datos                                                    |
 |--------------------|----------------------------------------------------------|
 | Institución        | Universidad Técnica de Ambato (UTA)                      |

@@ -218,6 +218,14 @@ export async function crearNodo(nombre, tipo, pos_x, pos_y) {
     return data;
 }
 
+export async function eliminarNodo(id) {
+    // Primero eliminar rutas que usen este nodo
+    await supabase.from('rutas_campus')
+        .delete().or(`nodo_origen_id.eq.${id},nodo_destino_id.eq.${id}`);
+    const { error } = await supabase.from('nodos_campus').delete().eq('id', id);
+    if (error) throw new Error(error.message);
+}
+
 export async function crearRuta(nodo_origen_id, nodo_destino_id, distancia, bidireccional = true) {
     const { data, error } = await supabase
         .from('rutas_campus').insert([{ nodo_origen_id, nodo_destino_id, distancia, bidireccional }]).select().single();

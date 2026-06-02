@@ -31,6 +31,8 @@
 
       <div class="row g-4">
         <div class="col-lg-4">
+
+          <!-- Agregar nodo con coordenadas GPS reales -->
           <div class="content-panel mb-3">
             <h2 class="h5 mb-3">📍 Agregar punto del campus</h2>
             <div id="nodo-msg" hidden class="alert mb-2"></div>
@@ -49,20 +51,35 @@
                   <option value="cafeteria">Cafetería</option>
                 </select>
               </div>
+              <!-- Coordenadas GPS desde Google Maps -->
+              <div class="mb-2">
+                <label class="form-label fw-semibold small">
+                  Coordenadas GPS
+                  <span class="text-muted fw-normal">(pegar desde Google Maps)</span>
+                </label>
+                <input class="form-control form-control-sm" id="nodo-coords"
+                       placeholder="-1.2691416, -78.6256506"
+                       title="Pega las coordenadas copiadas de Google Maps: lat, lng">
+                <div class="form-text">Copia las coordenadas en Google Maps → clic derecho → copiar</div>
+              </div>
               <div class="row g-2 mb-2">
                 <div class="col">
-                  <label class="form-label fw-semibold small">Pos X</label>
-                  <input class="form-control form-control-sm" id="nodo-x" type="number" placeholder="0" required>
+                  <label class="form-label fw-semibold small">Latitud</label>
+                  <input class="form-control form-control-sm" id="nodo-lat" type="number" step="any" placeholder="-1.2691" required>
                 </div>
                 <div class="col">
-                  <label class="form-label fw-semibold small">Pos Y</label>
-                  <input class="form-control form-control-sm" id="nodo-y" type="number" placeholder="0" required>
+                  <label class="form-label fw-semibold small">Longitud</label>
+                  <input class="form-control form-control-sm" id="nodo-lng" type="number" step="any" placeholder="-78.6256" required>
                 </div>
               </div>
+              <button class="btn btn-outline-secondary btn-sm w-100 mb-2" type="button" id="btn-preview-nodo">
+                👁 Ver ubicación en mapa
+              </button>
               <button class="btn btn-primary btn-sm w-100" type="submit">+ Agregar nodo</button>
             </form>
           </div>
 
+          <!-- Conectar puntos -->
           <div class="content-panel mb-3">
             <h2 class="h5 mb-3">🔗 Conectar puntos</h2>
             <div id="ruta-msg" hidden class="alert mb-2"></div>
@@ -83,6 +100,7 @@
             </form>
           </div>
 
+          <!-- Dijkstra -->
           <div class="content-panel">
             <h2 class="h5 mb-3">🧭 Ruta óptima (Dijkstra)</h2>
             <div class="mb-2">
@@ -128,8 +146,440 @@
 
   <script type="module">
     import { requireSession } from '../../assets/js/auth.js';
-    import { obtenerNodosCampus, obtenerRutasCampus, crearNodo, crearRuta, eliminarRuta }
+    import { obtenerNodosCampus, obtenerRutasCampus, crearNodo, crearRuta, eliminarRuta, eliminarNodo }
       from '../../../src/Persistence/supabaseClient.js';
+
+    const usuario = requireSession();
+    if (!usuario || usuario.rol !== 'admin') { window.location.href = '../../../index.html'; }
+
+    /* ── Nodos base hardcodeados (siempre visibles) ── */
+    const NODOS_BASE = [
+      { id:'n01', nombre:'Universidad Técnica de Ambato',             cat:'admin',    lat:-1.2693988,  lng:-78.6255708, fuente:'base' },
+      { id:'n02', nombre:'Rectorado',                                 cat:'admin',    lat:-1.2676377,  lng:-78.6241788, fuente:'base' },
+      { id:'n03', nombre:'Secretaría',                                cat:'admin',    lat:-1.2676377,  lng:-78.6241788, fuente:'base' },
+      { id:'n04', nombre:'Bienestar Universitario',                   cat:'admin',    lat:-1.2694591,  lng:-78.6241797, fuente:'base' },
+      { id:'n06', nombre:'Biblioteca General',                        cat:'admin',    lat:-1.2669225,  lng:-78.6247209, fuente:'base' },
+      { id:'n07', nombre:'Facultad de Ingeniería en Sistemas Electrónica e Industrial', cat:'facultad', lat:-1.2676377, lng:-78.6241788, fuente:'base' },
+      { id:'n08', nombre:'Facultad de Ciencias Administrativas',      cat:'facultad', lat:-1.2680554,  lng:-78.6253033, fuente:'base' },
+      { id:'n09', nombre:'Facultad de Contabilidad y Auditoría',      cat:'facultad', lat:-1.2686643,  lng:-78.6247605, fuente:'base' },
+      { id:'n10', nombre:'Facultad de Ciencias Humanas y de la Educación', cat:'facultad', lat:-1.2666236, lng:-78.6248803, fuente:'base' },
+      { id:'n11', nombre:'Facultad de Diseño, Arquitectura y Artes',  cat:'facultad', lat:-1.2669225,  lng:-78.6247209, fuente:'base' },
+      { id:'n12', nombre:'Facultad de Ingeniería Civil y Mecánica',   cat:'facultad', lat:-1.2687379,  lng:-78.6241934, fuente:'base' },
+      { id:'n13', nombre:'Facultad de Ciencia e Ingeniería en Alimentos', cat:'facultad', lat:-1.2694924, lng:-78.6242755, fuente:'base' },
+      { id:'n14', nombre:'Facultad de Jurisprudencia y Ciencias Sociales', cat:'facultad', lat:-1.2680609, lng:-78.6244933, fuente:'base' },
+      { id:'n15', nombre:'Centro de Idiomas',                         cat:'facultad', lat:-1.2678076,  lng:-78.6239649, fuente:'base' },
+      { id:'n16', nombre:'Edificio de Ciencias Básicas',              cat:'facultad', lat:-1.2675787,  lng:-78.6239318, fuente:'base' },
+      { id:'n17', nombre:'Carrera de Mercadotecnia',                  cat:'facultad', lat:-1.2677002,  lng:-78.6252309, fuente:'base' },
+      { id:'n19', nombre:'Coliseo Universitario',                     cat:'deporte',  lat:-1.2694591,  lng:-78.6241797, fuente:'base' },
+      { id:'n20', nombre:'Estadio Universitario',                     cat:'deporte',  lat:-1.2704822,  lng:-78.6226741, fuente:'base' },
+      { id:'n21', nombre:'Complejo Acuático',                         cat:'deporte',  lat:-1.2701603,  lng:-78.6239970, fuente:'base' },
+      { id:'n27', nombre:'Estadio de la Universidad Técnica de Ambato', cat:'deporte', lat:-1.2693819, lng:-78.6255475, fuente:'base' },
+      { id:'n22', nombre:'Patio de Comidas',                          cat:'servicio', lat:-1.2683338,  lng:-78.6235557, fuente:'base' },
+      { id:'n26', nombre:'Ambulancia',                                cat:'servicio', lat:-1.2683338,  lng:-78.6235557, fuente:'base' },
+      { id:'n23', nombre:'Parqueadero Norte',                         cat:'servicio', lat:-1.2676377,  lng:-78.6241788, fuente:'base' },
+      { id:'n24', nombre:'Parqueadero Sur',                           cat:'servicio', lat:-1.2687379,  lng:-78.6241934, fuente:'base' },
+      { id:'n25', nombre:'Entrada Principal',                         cat:'servicio', lat:-1.2669124,  lng:-78.6245667, fuente:'base' },
+    ];
+
+    const CONEXIONES_BASE = [
+      ['n25','n06',80],['n25','n10',100],
+      ['n06','n02',90],['n06','n08',110],['n06','n14',95],
+      ['n06','n22',60],['n06','n04',110],['n06','n17',75],['n06','n01',55],
+      ['n02','n07',5],['n02','n03',5],['n02','n15',60],['n02','n16',55],
+      ['n15','n16',30],
+      ['n08','n09',70],['n09','n10',80],['n10','n11',90],['n08','n14',85],
+      ['n07','n12',130],['n12','n13',140],['n12','n24',100],
+      ['n04','n19',120],['n19','n22',100],['n19','n04',80],
+      ['n20','n21',90],['n21','n19',150],
+      ['n23','n02',120],['n23','n15',60],
+      ['n22','n26',5],['n01','n27',5],['n01','n02',200],['n01','n04',80],
+    ];
+
+    const CAT = {
+      admin:    { bg:'#1a3a5c', emoji:'🏛️', label:'Administración' },
+      facultad: { bg:'#c0392b', emoji:'🎓', label:'Facultad'       },
+      deporte:  { bg:'#1e8449', emoji:'⚽', label:'Deportes'       },
+      servicio: { bg:'#d35400', emoji:'🍽️', label:'Servicio'       },
+    };
+    const EMOJI_ESP = { n23:'🅿️', n24:'🅿️', n25:'🚪', n26:'🚑', n27:'⚽' };
+    const getEmoji = n => EMOJI_ESP[n.id] || CAT[n.cat]?.emoji || '📍';
+    const catPorTipo = { edificio:'facultad', entrada:'servicio', parqueadero:'servicio', area_verde:'deporte', cafeteria:'servicio' };
+
+    /* ── Mapa Leaflet ── */
+    const map = L.map('map', { center: [-1.2685, -78.6245], zoom: 17, minZoom: 15, maxZoom: 19 });
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>', maxZoom: 19,
+    }).addTo(map);
+
+    const leg = L.control({ position: 'bottomright' });
+    leg.onAdd = () => {
+      const d = L.DomUtil.create('div', 'leaflet-legend');
+      d.innerHTML = `<strong style="font-size:.85rem">Leyenda</strong><br>
+        <span class="legend-dot" style="background:#1a3a5c"></span>Administración<br>
+        <span class="legend-dot" style="background:#c0392b"></span>Facultades<br>
+        <span class="legend-dot" style="background:#1e8449"></span>Deportes<br>
+        <span class="legend-dot" style="background:#d35400"></span>Servicios<br>
+        <span class="legend-dot" style="background:#6f42c1"></span>Nuevo (Supabase)`;
+      return d;
+    };
+    leg.addTo(map);
+
+    /* ── Estado del grafo ── */
+    const markerMap  = new Map(); // id → { nodo, marker }
+    const lineaLayers = [];       // conexiones base
+    let   rutaLayer  = null;
+    let   previewMarker = null;
+    let   NODOS_VIVOS = [...NODOS_BASE]; // base + supabase
+    const adj = new Map();
+
+    /* ── Construir grafo ── */
+    function reconstruirGrafo() {
+      adj.clear();
+      NODOS_VIVOS.forEach(n => adj.set(n.id, []));
+      CONEXIONES_BASE.forEach(([a, b, d]) => {
+        adj.get(a)?.push({ dest: b, dist: d });
+        adj.get(b)?.push({ dest: a, dist: d });
+      });
+    }
+
+    /* ── Dijkstra ── */
+    function dijkstraLocal(origen, destino) {
+      const dist = new Map(NODOS_VIVOS.map(n => [n.id, Infinity]));
+      const prev = new Map(); const vis = new Set();
+      dist.set(origen, 0);
+      while (true) {
+        let u = null;
+        for (const [id, d] of dist) if (!vis.has(id) && (u === null || d < dist.get(u))) u = id;
+        if (u === null || dist.get(u) === Infinity || u === destino) break;
+        vis.add(u);
+        for (const { dest, dist: w } of (adj.get(u) || [])) {
+          const alt = dist.get(u) + w;
+          if (alt < dist.get(dest)) { dist.set(dest, alt); prev.set(dest, u); }
+        }
+      }
+      const ruta = []; let cur = destino;
+      while (cur !== undefined) { ruta.unshift(cur); cur = prev.get(cur); }
+      const valida = ruta.length >= 2 && ruta[0] === origen;
+      return { distancia: valida ? dist.get(destino) : Infinity, ruta: valida ? ruta : [] };
+    }
+
+    /* ── Crear marcador en el mapa ── */
+    function agregarMarcadorMapa(nodo) {
+      if (markerMap.has(nodo.id)) return;
+      const bg    = CAT[nodo.cat]?.bg || '#6f42c1';
+      const emoji = getEmoji(nodo);
+      const esNuevo = nodo.fuente === 'supabase';
+      const icon = L.divIcon({
+        html: `<div style="background:${esNuevo ? '#6f42c1' : bg};color:#fff;border-radius:50%;
+               width:36px;height:36px;display:flex;align-items:center;justify-content:center;
+               font-size:17px;border:3px solid #fff;box-shadow:0 3px 10px rgba(0,0,0,.4)">${emoji}</div>`,
+        className: '', iconSize: [36, 36], iconAnchor: [18, 18],
+      });
+      const label = esNuevo ? '<span class="badge bg-purple" style="background:#6f42c1">Nuevo</span>' : '';
+      const marker = L.marker([nodo.lat, nodo.lng], { icon })
+        .addTo(map)
+        .bindPopup(`<strong>${nodo.nombre}</strong><br>
+                    <small style="color:${esNuevo ? '#6f42c1' : bg}">${esNuevo ? 'Agregado por admin' : CAT[nodo.cat]?.label}</small>
+                    ${esNuevo ? `<br><button onclick="window._eliminarNodo('${nodo.id}')" class="btn btn-danger btn-sm mt-1 w-100">🗑 Eliminar nodo</button>` : ''}`);
+      markerMap.set(nodo.id, { nodo, marker });
+    }
+
+    /* ── Eliminar marcador del mapa ── */
+    function quitarMarcadorMapa(id) {
+      const e = markerMap.get(id);
+      if (e) { map.removeLayer(e.marker); markerMap.delete(id); }
+    }
+
+    /* ── Llenar selectores ── */
+    function fillSelects() {
+      ['ruta-origen', 'ruta-destino', 'dij-origen', 'dij-destino'].forEach(selId => {
+        const sel = document.getElementById(selId);
+        sel.innerHTML = '';
+        NODOS_VIVOS.forEach(n => { sel.innerHTML += `<option value="${n.id}">${n.nombre}</option>`; });
+      });
+    }
+
+    /* ── Cargar nodos de Supabase y agregarlos al mapa ── */
+    async function cargarNodosSupabase() {
+      try {
+        const nodosDB = await obtenerNodosCampus();
+        if (!nodosDB?.length) return;
+
+        nodosDB.forEach(n => {
+          // Evitar duplicar nodos base
+          const yaExiste = NODOS_VIVOS.some(v => v.nombre === n.nombre);
+          if (yaExiste) return;
+
+          const nuevoNodo = {
+            id:     'sb_' + n.id,
+            dbId:   n.id,
+            nombre: n.nombre,
+            cat:    catPorTipo[n.tipo] || 'facultad',
+            lat:    parseFloat(n.pos_x),
+            lng:    parseFloat(n.pos_y),
+            fuente: 'supabase',
+          };
+
+          if (isNaN(nuevoNodo.lat) || isNaN(nuevoNodo.lng)) return;
+          NODOS_VIVOS.push(nuevoNodo);
+          agregarMarcadorMapa(nuevoNodo);
+        });
+
+        reconstruirGrafo();
+        fillSelects();
+        recargarTabla();
+      } catch (e) {
+        console.warn('Error cargando nodos de Supabase:', e);
+      }
+    }
+
+    /* ── Eliminar nodo desde popup o tabla ── */
+    window._eliminarNodo = async (id) => {
+      const entry = markerMap.get(id);
+      if (!entry) return;
+      const nodo = entry.nodo;
+      if (!confirm(`¿Eliminar "${nodo.nombre}" del mapa?`)) return;
+      try {
+        if (nodo.dbId) await eliminarNodo(nodo.dbId);
+        quitarMarcadorMapa(id);
+        NODOS_VIVOS = NODOS_VIVOS.filter(n => n.id !== id);
+        reconstruirGrafo();
+        fillSelects();
+        await recargarTabla();
+        alert(`✅ Nodo "${nodo.nombre}" eliminado.`);
+      } catch (e) { alert('Error: ' + e.message); }
+    };
+
+    /* ── Dibujar conexiones base ── */
+    function dibujarConexionesBase() {
+      CONEXIONES_BASE.forEach(([a, b]) => {
+        const na = markerMap.get(a)?.nodo, nb = markerMap.get(b)?.nodo;
+        if (!na || !nb) return;
+        L.polyline([[na.lat, na.lng], [nb.lat, nb.lng]],
+          { color: '#4a90d9', weight: 2.5, opacity: 0.6 }).addTo(map);
+      });
+    }
+
+    /* ── Tabla de nodos + rutas ── */
+    async function recargarTabla() {
+      const el = document.getElementById('tabla-rutas');
+      try {
+        const [nodosDB, rutasDB] = await Promise.all([obtenerNodosCampus(), obtenerRutasCampus()]);
+
+        // Tabla de nodos dinámicos (solo los de Supabase)
+        const nodosHTML = nodosDB?.length
+          ? `<div class="mb-4">
+              <h6 class="text-muted small mb-2">Nodos agregados por el administrador (Supabase)</h6>
+              <div class="table-responsive">
+                <table class="table table-sm table-hover align-middle mb-0">
+                  <thead class="table-light">
+                    <tr>
+                      <th class="small text-muted">Nombre</th>
+                      <th class="small text-muted">Tipo</th>
+                      <th class="small text-muted">Lat</th>
+                      <th class="small text-muted">Lng</th>
+                      <th class="small text-muted">Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${nodosDB.map(n => `
+                      <tr>
+                        <td class="small fw-semibold">${n.nombre}</td>
+                        <td class="small">${n.tipo}</td>
+                        <td class="small text-muted">${parseFloat(n.pos_x).toFixed(6)}</td>
+                        <td class="small text-muted">${parseFloat(n.pos_y).toFixed(6)}</td>
+                        <td>
+                          <button class="btn btn-outline-danger btn-sm"
+                            onclick="window._eliminarNodo('sb_${n.id}')"
+                            data-dbnodo="${n.id}">🗑 Eliminar</button>
+                        </td>
+                      </tr>`).join('')}
+                  </tbody>
+                </table>
+              </div>
+            </div>`
+          : '<p class="text-muted small mb-3">No hay nodos dinámicos en Supabase aún.</p>';
+
+        // Tabla de conexiones
+        const nNombre = id => nodosDB?.find(n => n.id == id)?.nombre
+          || NODOS_VIVOS.find(n => n.id == id || n.dbId == id)?.nombre
+          || id;
+
+        const rutasHTML = rutasDB?.length
+          ? `<h6 class="text-muted small mb-2">Conexiones en Supabase</h6>
+             <div class="table-responsive">
+               <table class="table table-sm table-hover align-middle mb-0">
+                 <thead class="table-light">
+                   <tr>
+                     <th class="small text-muted">Origen</th><th class="small text-muted">Destino</th>
+                     <th class="small text-muted">Dist (m)</th><th class="small text-muted">Bidir.</th>
+                     <th class="small text-muted">Acciones</th>
+                   </tr>
+                 </thead>
+                 <tbody>
+                   ${rutasDB.map(r => `
+                     <tr>
+                       <td class="small">${nNombre(r.nodo_origen_id)}</td>
+                       <td class="small">${nNombre(r.nodo_destino_id)}</td>
+                       <td class="small">${r.distancia ?? '—'}</td>
+                       <td class="small">${r.bidireccional ? '✅' : '→'}</td>
+                       <td><button class="btn btn-outline-danger btn-sm" data-del="${r.id}">✕</button></td>
+                     </tr>`).join('')}
+                 </tbody>
+               </table>
+             </div>`
+          : '<p class="text-muted small">No hay conexiones en Supabase.</p>';
+
+        el.innerHTML = nodosHTML + rutasHTML;
+      } catch (e) {
+        el.innerHTML = `<div class="alert alert-warning small">Error: ${e.message}</div>`;
+      }
+    }
+
+    /* ── Parser coords Google Maps ── */
+    document.getElementById('nodo-coords').addEventListener('input', (e) => {
+      const raw   = e.target.value.trim();
+      const match = raw.match(/(-?\d+\.?\d*)[,\s]+(-?\d+\.?\d*)/);
+      if (match) {
+        document.getElementById('nodo-lat').value = match[1];
+        document.getElementById('nodo-lng').value = match[2];
+      }
+    });
+
+    /* ── Preview nodo ── */
+    document.getElementById('btn-preview-nodo').addEventListener('click', () => {
+      const lat = parseFloat(document.getElementById('nodo-lat').value);
+      const lng = parseFloat(document.getElementById('nodo-lng').value);
+      if (isNaN(lat) || isNaN(lng)) { alert('Ingresa coordenadas válidas primero.'); return; }
+      if (previewMarker) map.removeLayer(previewMarker);
+      previewMarker = L.marker([lat, lng], {
+        icon: L.divIcon({
+          html: `<div style="background:#f0ad4e;color:#fff;border-radius:50%;width:36px;height:36px;
+                 display:flex;align-items:center;justify-content:center;font-size:18px;
+                 border:3px solid #fff;box-shadow:0 3px 10px rgba(0,0,0,.4)">📍</div>`,
+          className: '', iconSize: [36, 36], iconAnchor: [18, 18],
+        }),
+      }).addTo(map).bindPopup('<strong>Ubicación del nuevo nodo</strong>').openPopup();
+      map.flyTo([lat, lng], 18, { duration: 1 });
+    });
+
+    /* ── Agregar nodo ── */
+    document.getElementById('form-nodo').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const msg    = document.getElementById('nodo-msg');
+      const nombre = document.getElementById('nodo-nombre').value.trim();
+      const tipo   = document.getElementById('nodo-tipo').value;
+      const lat    = parseFloat(document.getElementById('nodo-lat').value);
+      const lng    = parseFloat(document.getElementById('nodo-lng').value);
+      msg.hidden   = true;
+
+      if (isNaN(lat) || isNaN(lng)) {
+        msg.className = 'alert alert-danger';
+        msg.textContent = 'Ingresa coordenadas GPS válidas.';
+        msg.hidden = false; return;
+      }
+
+      try {
+        // Guardar en Supabase — pos_x=lat, pos_y=lng
+        const saved = await crearNodo(nombre, tipo, lat, lng);
+
+        const newNodo = {
+          id:     'sb_' + saved.id,
+          dbId:   saved.id,
+          nombre,
+          cat:    catPorTipo[tipo] || 'facultad',
+          lat, lng,
+          fuente: 'supabase',
+        };
+
+        NODOS_VIVOS.push(newNodo);
+        reconstruirGrafo();
+        agregarMarcadorMapa(newNodo);
+        fillSelects();
+
+        if (previewMarker) { map.removeLayer(previewMarker); previewMarker = null; }
+        map.flyTo([lat, lng], 18, { duration: 1 });
+        markerMap.get(newNodo.id)?.marker?.openPopup();
+
+        msg.className   = 'alert alert-success';
+        msg.textContent = `✅ "${nombre}" agregado al mapa. Visible en todos los roles.`;
+        msg.hidden      = false;
+        e.target.reset();
+        document.getElementById('nodo-coords').value = '';
+        await recargarTabla();
+      } catch (err) {
+        msg.className   = 'alert alert-danger';
+        msg.textContent = err.message;
+        msg.hidden      = false;
+      }
+    });
+
+    /* ── Conectar nodos ── */
+    document.getElementById('form-ruta').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const msg = document.getElementById('ruta-msg');
+      msg.hidden = true;
+      try {
+        await crearRuta(
+          document.getElementById('ruta-origen').value,
+          document.getElementById('ruta-destino').value,
+          parseFloat(document.getElementById('ruta-dist').value)
+        );
+        msg.className = 'alert alert-success'; msg.textContent = 'Conexión creada.'; msg.hidden = false;
+        e.target.reset(); await recargarTabla();
+      } catch (err) { msg.className = 'alert alert-danger'; msg.textContent = err.message; msg.hidden = false; }
+    });
+
+    /* ── Dijkstra ── */
+    document.getElementById('btn-dijkstra').addEventListener('click', () => {
+      const oId = document.getElementById('dij-origen').value;
+      const dId = document.getElementById('dij-destino').value;
+      const elR = document.getElementById('dij-resultado');
+      if (!oId || !dId) { alert('Selecciona origen y destino.'); return; }
+      if (oId === dId)  { alert('Selecciona puntos diferentes.'); return; }
+
+      const { distancia, ruta } = dijkstraLocal(oId, dId);
+      if (rutaLayer) { map.removeLayer(rutaLayer); rutaLayer = null; }
+      elR.hidden = false;
+
+      if (!ruta.length || distancia === Infinity) {
+        elR.innerHTML = '<span class="text-danger">⚠ No hay ruta disponible.</span>'; return;
+      }
+
+      const nombres = ruta.map(id => markerMap.get(id)?.nodo?.nombre || id).join(' → ');
+      elR.innerHTML = `<strong>Ruta:</strong> ${nombres}<br><small>Distancia: <strong>${distancia.toFixed(0)} m</strong></small>`;
+
+      const coords = ruta.map(id => { const e = markerMap.get(id); return e ? [e.nodo.lat, e.nodo.lng] : null; }).filter(Boolean);
+      rutaLayer = L.polyline(coords, { color: '#e87a2a', weight: 6, opacity: 0.9 }).addTo(map);
+      map.fitBounds(rutaLayer.getBounds(), { padding: [50, 50] });
+    });
+
+    /* ── Eliminar ruta ── */
+    document.getElementById('tabla-rutas').addEventListener('click', async (ev) => {
+      const btn = ev.target.closest('[data-del]');
+      if (!btn) return;
+      if (!confirm('¿Eliminar esta conexión?')) return;
+      try { await eliminarRuta(btn.dataset.del); await recargarTabla(); }
+      catch (e) { alert(e.message); }
+    });
+
+    document.getElementById('btn-refrescar-rutas').addEventListener('click', async () => {
+      await cargarNodosSupabase();
+      await recargarTabla();
+    });
+
+    /* ── Inicializar ── */
+    document.addEventListener('DOMContentLoaded', async () => {
+      // 1. Dibujar nodos base
+      reconstruirGrafo();
+      NODOS_BASE.forEach(n => agregarMarcadorMapa(n));
+      dibujarConexionesBase();
+      fillSelects();
+
+      // 2. Cargar nodos dinámicos de Supabase
+      await cargarNodosSupabase();
+    });
+  </script>
 
     const usuario = requireSession();
     if (!usuario || usuario.rol !== 'admin') { window.location.href = '../../../index.html'; }
@@ -196,7 +646,7 @@
     });
 
     function dijkstraLocal(origen, destino) {
-      const dist = new Map(NODOS_CAMPUS.map(n => [n.id, Infinity]));
+      const dist = new Map(NODOS_VIVOS.map(n => [n.id, Infinity]));
       const prev = new Map(); const vis = new Set();
       dist.set(origen, 0);
       while (true) {
@@ -210,8 +660,9 @@
         }
       }
       const ruta = []; let cur = destino;
-      while (cur) { ruta.unshift(cur); cur = prev.get(cur); }
-      return { distancia: dist.get(destino), ruta: ruta[0] === origen ? ruta : [] };
+      while (cur !== undefined) { ruta.unshift(cur); cur = prev.get(cur); }
+      const valida = ruta.length >= 2 && ruta[0] === origen;
+      return { distancia: valida ? dist.get(destino) : Infinity, ruta: valida ? ruta : [] };
     }
 
     /* ── Mapa Leaflet ── */
@@ -260,15 +711,47 @@
         { color: '#4a90d9', weight: 2.5, opacity: 0.6 }).addTo(map);
     });
 
-    /* ── Llenar selectores con NODOS_CAMPUS ── */
+    /* ── Llenar selectores (hardcodeados + dinámicos) ── */
+    // Lista viva de nodos (hardcoded + agregados dinámicamente)
+    let NODOS_VIVOS = [...NODOS_CAMPUS];
+
     function fillSelects() {
       ['ruta-origen', 'ruta-destino', 'dij-origen', 'dij-destino'].forEach(id => {
         const sel = document.getElementById(id);
         sel.innerHTML = '';
-        NODOS_CAMPUS.forEach(n => { sel.innerHTML += `<option value="${n.id}">${n.nombre}</option>`; });
+        NODOS_VIVOS.forEach(n => { sel.innerHTML += `<option value="${n.id}">${n.nombre}</option>`; });
       });
     }
     fillSelects();
+
+    /* ── Parser de coordenadas Google Maps ── */
+    document.getElementById('nodo-coords').addEventListener('input', (e) => {
+      const raw = e.target.value.trim();
+      // Acepta formato: "-1.2691416, -78.6256506" o "-1.2691416 -78.6256506"
+      const match = raw.match(/(-?\d+\.?\d*)[,\s]+(-?\d+\.?\d*)/);
+      if (match) {
+        document.getElementById('nodo-lat').value = match[1];
+        document.getElementById('nodo-lng').value = match[2];
+      }
+    });
+
+    /* ── Preview del nodo en el mapa ── */
+    let previewMarker = null;
+    document.getElementById('btn-preview-nodo').addEventListener('click', () => {
+      const lat = parseFloat(document.getElementById('nodo-lat').value);
+      const lng = parseFloat(document.getElementById('nodo-lng').value);
+      if (isNaN(lat) || isNaN(lng)) { alert('Ingresa coordenadas válidas primero.'); return; }
+      if (previewMarker) map.removeLayer(previewMarker);
+      previewMarker = L.marker([lat, lng], {
+        icon: L.divIcon({
+          html: `<div style="background:#f0ad4e;color:#fff;border-radius:50%;width:36px;height:36px;
+                 display:flex;align-items:center;justify-content:center;font-size:18px;
+                 border:3px solid #fff;box-shadow:0 3px 10px rgba(0,0,0,.4)">📍</div>`,
+          className: '', iconSize: [36, 36], iconAnchor: [18, 18],
+        }),
+      }).addTo(map).bindPopup('<strong>Ubicación del nuevo nodo</strong>').openPopup();
+      map.flyTo([lat, lng], 18, { duration: 1 });
+    });
 
     /* ── Tabla de rutas desde Supabase ── */
     let nodosDBCache = [];
@@ -279,7 +762,7 @@
       const nNombre = id => {
         const dbN = nodosDBCache.find(n => n.id == id);
         if (dbN) return dbN.nombre;
-        const local = NODOS_CAMPUS.find(n => n.id == id);
+        const local = NODOS_VIVOS.find(n => n.id == id);
         return local ? local.nombre : id;
       };
       el.innerHTML = `
@@ -316,21 +799,71 @@
       }
     }
 
-    /* ── Formulario nodo ── */
+    /* ── Agregar nodo con coordenadas GPS ── */
     document.getElementById('form-nodo').addEventListener('submit', async (e) => {
       e.preventDefault();
-      const msg = document.getElementById('nodo-msg');
+      const msg   = document.getElementById('nodo-msg');
+      const nombre = document.getElementById('nodo-nombre').value.trim();
+      const tipo   = document.getElementById('nodo-tipo').value;
+      const lat    = parseFloat(document.getElementById('nodo-lat').value);
+      const lng    = parseFloat(document.getElementById('nodo-lng').value);
+
       msg.hidden = true;
+
+      if (isNaN(lat) || isNaN(lng)) {
+        msg.className = 'alert alert-danger';
+        msg.textContent = 'Ingresa coordenadas GPS válidas (lat, lng).';
+        msg.hidden = false;
+        return;
+      }
+
       try {
-        await crearNodo(
-          document.getElementById('nodo-nombre').value,
-          document.getElementById('nodo-tipo').value,
-          parseFloat(document.getElementById('nodo-x').value),
-          parseFloat(document.getElementById('nodo-y').value)
-        );
-        msg.className = 'alert alert-success'; msg.textContent = 'Nodo guardado en Supabase.'; msg.hidden = false;
-        e.target.reset(); await recargarTabla();
-      } catch (err) { msg.className = 'alert alert-danger'; msg.textContent = err.message; msg.hidden = false; }
+        // Guardar en Supabase usando lat/lng como pos_x/pos_y para compatibilidad
+        const result = await crearNodo(nombre, tipo, lat, lng);
+
+        // Crear nuevo nodo local con ID temporal
+        const newId = 'dyn_' + Date.now();
+        const catMap = {
+          edificio: 'facultad', entrada: 'servicio',
+          parqueadero: 'servicio', area_verde: 'deporte', cafeteria: 'servicio',
+        };
+        const newNodo = { id: newId, nombre, cat: catMap[tipo] || 'facultad', lat, lng };
+
+        // Agregar marcador al mapa
+        const bg   = CAT[newNodo.cat].bg;
+        const icon = L.divIcon({
+          html: `<div style="background:${bg};color:#fff;border-radius:50%;width:36px;height:36px;
+                 display:flex;align-items:center;justify-content:center;font-size:17px;
+                 border:3px solid #fff;box-shadow:0 3px 10px rgba(0,0,0,.4)">
+                 ${CAT[newNodo.cat].emoji}</div>`,
+          className: '', iconSize: [36, 36], iconAnchor: [18, 18],
+        });
+        const marker = L.marker([lat, lng], { icon })
+          .addTo(map)
+          .bindPopup(`<strong>${nombre}</strong><br><small style="color:${bg}">Nuevo · ${tipo}</small>`)
+          .openPopup();
+        markerMap.set(newId, { nodo: newNodo, marker });
+
+        // Actualizar grafo local y selectores
+        NODOS_VIVOS.push(newNodo);
+        adj.set(newId, []);
+        fillSelects();
+
+        // Quitar preview y volar al nuevo nodo
+        if (previewMarker) { map.removeLayer(previewMarker); previewMarker = null; }
+        map.flyTo([lat, lng], 18, { duration: 1 });
+
+        msg.className = 'alert alert-success';
+        msg.textContent = `✅ Nodo "${nombre}" agregado al mapa y guardado en Supabase.`;
+        msg.hidden = false;
+        e.target.reset();
+        document.getElementById('nodo-coords').value = '';
+        await recargarTabla();
+      } catch (err) {
+        msg.className = 'alert alert-danger';
+        msg.textContent = err.message;
+        msg.hidden = false;
+      }
     });
 
     /* ── Formulario ruta ── */
